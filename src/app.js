@@ -79,7 +79,14 @@ function createApp() {
     const { email: em, password } = req.body || {};
     const h = (s) => crypto.createHash('sha256').update(String(s).trim().toLowerCase()).digest();
     const emailOk = typeof em === 'string' && !!config.adminEmail && crypto.timingSafeEqual(h(em), h(config.adminEmail));
-    const passOk = typeof password === 'string' && config.adminPasswordHash && (await bcrypt.compare(password, config.adminPasswordHash));
+    let passOk = false;
+    if (typeof password === 'string') {
+      if (config.adminPasswordHash) passOk = await bcrypt.compare(password, config.adminPasswordHash);
+      else if (config.adminPassword) {
+        const p = (s) => crypto.createHash('sha256').update(String(s)).digest();
+        passOk = crypto.timingSafeEqual(p(password), p(config.adminPassword));
+      }
+    }
     if (!emailOk || !passOk) {
       a.n += 1; attempts.set(ip, a);
       return res.status(401).json({ error: 'invalid_credentials' });

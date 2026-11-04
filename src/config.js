@@ -5,6 +5,7 @@ module.exports = {
   appUrl: (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, ''),
   adminEmail: process.env.ADMIN_EMAIL,
   adminPasswordHash: process.env.ADMIN_PASSWORD_HASH,
+  adminPassword: process.env.ADMIN_PASSWORD,
   sessionSecret: process.env.SESSION_SECRET,
   resendApiKey: process.env.RESEND_API_KEY,
   webhookSecret: process.env.WEBHOOK_SECRET,
@@ -18,7 +19,8 @@ module.exports = {
 };
 
 module.exports.validate = function validate() {
-  const required = ['DATABASE_URL', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'SESSION_SECRET', 'APP_URL', 'WEBHOOK_SECRET'];
+  const required = ['DATABASE_URL', 'ADMIN_EMAIL', 'SESSION_SECRET', 'APP_URL', 'WEBHOOK_SECRET'];
+  if (!process.env.ADMIN_PASSWORD_HASH && !process.env.ADMIN_PASSWORD) required.push('ADMIN_PASSWORD (or ADMIN_PASSWORD_HASH)');
   if ((process.env.EMAIL_PROVIDER || 'resend') === 'resend') required.push('RESEND_API_KEY', 'EMAIL_FROM');
   const missing = required.filter((k) => !process.env[k]);
   if (missing.length) {

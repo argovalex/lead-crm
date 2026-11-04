@@ -42,7 +42,7 @@ DATABASE_URL=$TEST_DATABASE_URL npm test
 4. Service → **Variables**:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
    - `APP_URL` = the public URL (Settings → Networking → **Generate Domain**, or your custom domain)
-   - `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `SESSION_SECRET` (`openssl rand -hex 32`)
+   - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (or a bcrypt `ADMIN_PASSWORD_HASH`), `SESSION_SECRET` (`openssl rand -hex 32`)
    - `RESEND_API_KEY`, `EMAIL_FROM`, `WEBHOOK_SECRET` (step 6)
    - `NODE_ENV=production`, optional `DAILY_SEND_CAP`, `SENDS_PER_MINUTE`, `STALE_DAYS`
 5. Deploy. `railway.json` sets the start command (`prisma migrate deploy && node src/server.js`) and the `/healthz` health check. Keep **1 replica** (more is safe thanks to the advisory lock, but unnecessary). Don't enable "serverless/app sleeping" — the scheduler needs the process running.
