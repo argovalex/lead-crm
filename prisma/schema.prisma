@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Stage {
+  NEW
+  CONTACTED
+  ENGAGED
+  QUALIFIED
+  PROPOSAL
+  WON
+  LOST
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  STOPPED
+}
+
+enum MessageStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model Lead {
+  id             Int          @id @default(autoincrement())
+  name           String
+  email          String       @unique
+  phone          String?
+  company        String?
+  source         String?
+  tags           String[]     @default([])
+  notes          String?
+  owner          String?
+  stage          Stage        @default(NEW)
+  unsubscribed   Boolean      @default(false)
+  unsubToken     String       @unique
+  bounced        Boolean      @default(false)
+  replied        Boolean      @default(false)
+  stale          Boolean      @default(false)
+  lastActivityAt DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  activities     Activity[]
+  enrollments    Enrollment[]
+  messages       EmailMessage[]
+
+  @@index([stage])
+  @@index([lastActivityAt])
+}
+
+model Activity {
+  id        Int      @id @default(autoincrement())
+  leadId    Int
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type      String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
+  @@index([type])
+}
+
+model Sequence {
+  id          Int            @id @default(autoincrement())
+  name        String
+  steps       SequenceStep[]
+  enrollments Enrollment[]
+  createdAt   DateTime       @default(now())
+}
+
+model SequenceStep {
+  id         Int      @id @default(autoincrement())
+  sequenceId Int
+  sequence   Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  index      Int
+  delayDays  Int
+  subject    String
+  body       String
+
+  @@unique([sequenceId, index])
+}
+
+model Enrollment {
+  id            Int              @id @default(autoincrement())
+  leadId        Int
+  lead          Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  sequenceId    Int
+  sequence      Sequence         @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  status        EnrollmentStatus @default(ACTIVE)
+  stopReason    String?
+  nextStepIndex Int              @default(0)
+  nextRunAt     DateTime?
+  startedAt     DateTime         @default(now())
+  messages      EmailMessage[]
+
+  @@unique([leadId, sequenceId])
+  @@index([status, nextRunAt])
+}
+
+model EmailMessage {
+  id             Int           @id @default(autoincrement())
+  leadId         Int
+  lead           Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  enrollmentId   Int?
+  enrollment     Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  stepIndex      Int?
+  idempotencyKey String        @unique
+  subject        String
+  body           String
+  status         MessageStatus @default(QUEUED)
+  attempts       Int           @default(0)
+  lastError      String?
+  lockedAt       DateTime?
+  providerId     String?       @unique
+  createdAt      DateTime      @default(now())
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  openedAt       DateTime?
+  clickedAt      DateTime?
+  bouncedAt      DateTime?
+
+  @@index([status, createdAt])
+  @@index([sentAt])
+}
+
+model WebhookEvent {
+  id         String   @id
+  type       String
+  receivedAt DateTime @default(now())
+}

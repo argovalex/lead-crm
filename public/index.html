@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CRM</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M8 1l7 7-7 7-7-7z%22 fill=%22%231f6f54%22/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="top">
+  <div class="brand">◆ CRM</div>
+  <nav id="tabs">
+    <button data-view="board" class="active">לוח</button>
+    <button data-view="leads">לידים</button>
+    <button data-view="sequences">רצפי מיילים</button>
+    <button data-view="stats">סטטיסטיקה</button>
+    <button data-view="import">ייבוא</button>
+  </nav>
+  <button class="btn ghost" id="logout">יציאה</button>
+</header>
+
+<main>
+  <section id="view-board" class="view">
+    <div class="toolbar">
+      <input id="board-q" placeholder="חיפוש…">
+      <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
+    </div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section id="view-leads" class="view hidden">
+    <div class="toolbar wrap">
+      <input id="f-q" placeholder="חיפוש שם / מייל / חברה">
+      <select id="f-stage"><option value="">כל השלבים</option></select>
+      <select id="f-tag"><option value="">כל התגיות</option></select>
+      <select id="f-source"><option value="">כל המקורות</option></select>
+      <select id="f-inactive">
+        <option value="">כל פעילות</option>
+        <option value="7">ללא פעילות 7+ ימים</option>
+        <option value="14">ללא פעילות 14+ ימים</option>
+        <option value="30">ללא פעילות 30+ ימים</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="f-stale"> מסומנים כרדומים</label>
+      <span class="spacer"></span>
+      <select id="bulk-seq"><option value="">הוסף מסומנים לרצף…</option></select>
+      <button class="btn" id="bulk-enroll">הוסף</button>
+      <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
+    </div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>שם</th><th>אימייל</th><th>חברה</th><th>שלב</th><th>מקור</th><th>תגיות</th><th>פעילות אחרונה</th></tr></thead>
+        <tbody id="leads-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="view-sequences" class="view hidden">
+    <div class="toolbar"><button class="btn primary" id="new-seq">+ רצף חדש</button></div>
+    <div id="seq-list" class="cards"></div>
+  </section>
+
+  <section id="view-stats" class="view hidden">
+    <div class="toolbar">
+      <select id="stats-days"><option value="7">7 ימים</option><option value="30" selected>30 ימים</option><option value="90">90 ימים</option><option value="365">שנה</option></select>
+    </div>
+    <div id="stats"></div>
+  </section>
+
+  <section id="view-import" class="view hidden">
+    <div class="panel">
+      <h2>ייבוא לידים מ-CSV</h2>
+      <p class="muted">עמודות נתמכות (אנגלית או עברית): name/שם, email/אימייל, phone/טלפון, company/חברה, source/מקור, tags/תגיות (מופרדות בפסיק), notes/הערות, owner/אחראי. כפילויות לפי אימייל מדולגות.</p>
+      <form id="import-form">
+        <input type="file" name="file" accept=".csv,text/csv" required>
+        <input name="source" placeholder="מקור ברירת מחדל (אופציונלי)">
+        <button class="btn primary">ייבוא</button>
+      </form>
+      <div id="import-result"></div>
+    </div>
+  </section>
+</main>
+
+<aside id="drawer" class="drawer hidden" aria-hidden="true">
+  <div class="drawer-inner" id="drawer-body"></div>
+</aside>
+<div id="scrim" class="scrim hidden"></div>
+
+<dialog id="modal"><form method="dialog" id="modal-form"></form></dialog>
+<div id="toast" class="toast"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
