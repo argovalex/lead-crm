@@ -9,7 +9,7 @@ function resendProvider() {
     name: 'resend',
     async send({ to, subject, html, text, headers, idempotencyKey }) {
       const { data, error } = await client.emails.send(
-        { from: config.emailFrom, to, subject, html, text, headers },
+        { from: config.emailFrom, replyTo: config.emailReplyTo, to, subject, html, text, headers },
         { idempotencyKey },
       );
       if (error) throw new Error(`${error.name || 'resend_error'}: ${error.message}`);

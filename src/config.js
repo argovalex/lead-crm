@@ -10,6 +10,7 @@ module.exports = {
   resendApiKey: process.env.RESEND_API_KEY,
   webhookSecret: process.env.WEBHOOK_SECRET,
   emailFrom: process.env.EMAIL_FROM,
+  emailReplyTo: process.env.EMAIL_REPLY_TO || 'alex@alargov.com',
   emailProvider: process.env.EMAIL_PROVIDER || 'resend',
   dailySendCap: int(process.env.DAILY_SEND_CAP, 200),
   sendsPerMinute: int(process.env.SENDS_PER_MINUTE, 10),
