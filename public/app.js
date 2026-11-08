@@ -87,6 +87,7 @@ async function renderBoard() {
           <span class="c-fu ${fuState(l) === 'over' ? 'over' : 'muted'}">${l.nextFollowUpAt ? `${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}` : ''}</span>
           <span class="c-last muted" title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}</span>
           <span class="c-flags">${flagsHtml(l)}</span>
+          <button class="btn sm ghost danger c-del" data-del="${l.id}" data-name="${esc(l.name)}" title="מחיקה" aria-label="מחיקה">🗑</button>
           <select class="c-stage" aria-label="שלב">${STAGES.map((st) => `<option value="${st}" ${st === l.stage ? 'selected' : ''}>${STAGE_LABELS[st]}</option>`).join('')}</select>
         </div>`).join('')}</div>` : '<p class="muted empty">אין לידים בשלב</p>'}
     </details>`;
@@ -94,6 +95,8 @@ async function renderBoard() {
 
   board.querySelectorAll('.lrow').forEach((r) => r.addEventListener('click', (e) => {
     if (e.target.closest('select')) return;
+    const d = e.target.closest('[data-del]');
+    if (d) return confirmDelete([+d.dataset.del], d.dataset.name);
     openLead(+r.dataset.id);
   }));
   board.querySelectorAll('.c-stage').forEach((sel) => sel.addEventListener('change', async () => {
@@ -126,9 +129,12 @@ async function renderLeads() {
       <td><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span></td>
       <td>${esc(l.source)}</td><td>${(l.tags || []).map(esc).join(', ')}</td>
       <td title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}${l.stale ? ' <span class="flag warn">רדום</span>' : ''}</td>
-    </tr>`).join('') : '<tr><td colspan="10" class="muted">אין לידים תואמים</td></tr>';
+      <td><button class="btn sm ghost danger" data-del="${l.id}" data-name="${esc(l.name)}" title="מחיקה" aria-label="מחיקה">🗑</button></td>
+    </tr>`).join('') : '<tr><td colspan="11" class="muted">אין לידים תואמים</td></tr>';
   $('#leads-body').querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', (e) => {
     if (e.target.matches('input')) return;
+    const d = e.target.closest('[data-del]');
+    if (d) return confirmDelete([+d.dataset.del], d.dataset.name);
     openLead(+tr.dataset.id);
   }));
 }
@@ -239,10 +245,7 @@ async function openLead(id) {
   };
   $('#d-replied').onclick = async () => { try { await api(`/leads/${id}/replied`, { method: 'POST' }); toast('סומן — רצפים נעצרו'); refresh(); } catch (err) { fail(err); } };
   $('#d-unenroll').onclick = async () => { try { const r = await api(`/leads/${id}/unenroll`, { method: 'POST' }); toast(`נעצרו ${r.stopped} רצפים`); refresh(); } catch (err) { fail(err); } };
-  $('#d-del').onclick = async () => {
-    if (!confirm(`למחוק את ${l.name}? הפעולה אינה הפיכה.`)) return;
-    try { await api(`/leads/${id}`, { method: 'DELETE' }); closeDrawer(); toast('נמחק'); refreshView(); } catch (err) { fail(err); }
-  };
+  $('#d-del').onclick = () => confirmDelete([id], l.name);
   $('#d-seq').onchange = async (e) => {
     if (!e.target.value) return;
     try { await api(`/leads/${id}/enroll`, { method: 'POST', body: { sequenceId: +e.target.value } }); toast('נוסף לרצף'); refresh(); } catch (err) { fail(err); e.target.value = ''; }
@@ -257,9 +260,10 @@ const INSERT_BAR = (i = '') => `<div class="insrow"><button type="button" class=
 function composeModal(lead, prefill = {}) {
   const form = modal(`<h3>${lead ? `מייל ל-${esc(lead.name)}` : 'מייל חדש'}</h3>
     ${lead ? `<input type="hidden" name="leadId" value="${lead.id}">` : `
-    <label>אימייל הנמען<input name="email" type="email" dir="ltr" required></label>
-    <label>שם (אם הליד חדש)<input name="name"></label>
-    <label>חברה (אם הליד חדש)<input name="company"></label>`}
+    <label>אל: בחר ליד מהרשימה או הקלד כתובת חדשה<input name="email" type="text" list="to-opts" dir="ltr" autocomplete="off" required placeholder="התחל להקליד שם, חברה או אימייל"></label>
+    <datalist id="to-opts"></datalist>
+    <p class="muted" id="to-hint">הנמען יהפוך לליד אחרי השליחה (אם עוד לא קיים), והתשובה שלו תופיע בטאב "דואר".</p>
+    <div id="to-new" class="hidden"><label>שם (ליד חדש)<input name="name"></label><label>חברה (ליד חדש)<input name="company"></label></div>`}
     <label>נושא<input name="subject" required></label>
     <label>תוכן — משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="9" required></textarea></label>
     ${INSERT_BAR('')}
@@ -272,6 +276,22 @@ function composeModal(lead, prefill = {}) {
     if (lead) openLead(lead.id);
   }, 'שליחה');
   if (prefill.subject) form.querySelector('[name="subject"]').value = prefill.subject;
+  if (!lead) {
+    const dl = form.querySelector('#to-opts');
+    const inp = form.querySelector('[name="email"]');
+    const hint = form.querySelector('#to-hint');
+    const box = form.querySelector('#to-new');
+    api('/leads').then((all) => {
+      dl.innerHTML = all.map((l) => `<option value="${esc(l.email)}">${esc(l.name)}${l.company ? ` · ${esc(l.company)}` : ''}</option>`).join('');
+      const check = () => {
+        const v = inp.value.trim().toLowerCase();
+        const hit = all.find((l) => l.email.toLowerCase() === v);
+        box.classList.toggle('hidden', !!hit || !v.includes('@'));
+        hint.textContent = hit ? `ליד קיים: ${hit.name} (${STAGE_LABELS[hit.stage]}). המייל יתועד בכרטיס שלו.` : v.includes('@') ? 'כתובת חדשה. ייווצר ליד חדש אחרי השליחה.' : 'הנמען יהפוך לליד אחרי השליחה (אם עוד לא קיים), והתשובה שלו תופיע בטאב "דואר".';
+      };
+      inp.addEventListener('input', check);
+    }).catch(() => {});
+  }
 }
 
 // ---------------- Modal helper ----------------
@@ -359,6 +379,7 @@ function todayItem(l, group) {
       <button class="btn sm" data-a="done" title="טופל">✓</button>
       <button class="btn sm" data-a="snooze3" title="דחה 3 ימים">+3</button>
       <button class="btn sm" data-a="snooze7" title="דחה שבוע">+7</button>
+      <button class="btn sm ghost danger" data-a="del" data-name="${esc(l.name)}" title="מחיקה" aria-label="מחיקה">🗑</button>
     </span></div>`;
 }
 
@@ -406,6 +427,7 @@ $('#today').addEventListener('click', async (e) => {
   const leadId = +card.dataset.id;
   try {
     if (btn.dataset.a === 'open') return openLead(leadId);
+    if (btn.dataset.a === 'del') return confirmDelete([leadId], btn.dataset.name);
     if (btn.dataset.a === 'reply') {
       const lead = await api(`/leads/${leadId}`);
       const subj = card.dataset.subject;
@@ -494,6 +516,88 @@ function editSequence(seq) {
     bindRm();
   };
 }
+
+// ---------------- Delete (one or many) ----------------
+function confirmDelete(ids, label) {
+  modal(`<h3>מחיקה</h3><p>למחוק ${esc(label)}? יימחקו גם היסטוריית המיילים והתיעוד של הליד. אי אפשר לשחזר.</p>`, async () => {
+    await api('/leads/bulk-delete', { method: 'POST', body: { ids } });
+    toast(ids.length > 1 ? `${ids.length} לידים נמחקו` : 'נמחק');
+    if (ids.includes(mailSel)) mailSel = null;
+    closeDrawer();
+    loadMeta();
+    refreshView();
+  }, 'מחיקה');
+}
+
+// ---------------- Mail: conversations per lead ----------------
+let mailSel = null;
+let mailFilter = 'all';
+const KIND_LABEL = { campaign: 'קמפיין', manual: 'אישי', reply: 'תשובה שהתקבלה', logged: 'נשלח מחוץ למערכת' };
+const MSTATUS = { QUEUED: 'בתור', SENDING: 'נשלח כעת', DRAFT: 'ממתין לאישור' };
+
+async function renderMail(forceThread = false) {
+  const rows = await api('/mailbox');
+  const q = $('#mail-q').value.trim().toLowerCase();
+  const ok = (r) => (mailFilter === 'all' || (mailFilter === 'await' && r.awaiting) || (mailFilter === 'replied' && r.replies > 0)
+    || (mailFilter === 'campaign' && r.campaign > 0) || (mailFilter === 'manual' && r.sent - r.campaign > 0))
+    && (!q || `${r.lead.name} ${r.lead.email} ${r.lead.company || ''}`.toLowerCase().includes(q));
+  const list = rows.filter(ok);
+  const waiting = rows.filter((r) => r.awaiting).length;
+  const b = $('#mail-count');
+  b.textContent = waiting;
+  b.classList.toggle('hidden', !waiting);
+  $('#mail-filters').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.f === mailFilter));
+  $('#mail-list').innerHTML = list.length ? list.map((r) => `
+    <div class="mrow ${r.lead.id === mailSel ? 'sel' : ''} ${r.awaiting ? 'await' : ''}" data-id="${r.lead.id}">
+      <div class="m1"><b>${esc(r.lead.name)}</b><time>${ago(r.last.at)}</time></div>
+      <div class="m2 muted">${esc(r.lead.company || r.lead.email)}</div>
+      <div class="m3"><span class="dir ${r.last.dir}">${r.last.dir === 'in' ? '↩ התקבל' : '→ נשלח'}</span> <span dir="auto">${esc(r.last.subject || r.last.snippet)}</span></div>
+      <div class="m4">${r.awaiting ? '<span class="flag bad">להשיב</span>' : ''}${r.replies ? `<span class="flag good">${r.replies} תשובות</span>` : ''}${r.campaign ? '<span class="flag">קמפיין</span>' : ''}${r.pending ? `<span class="flag warn">${r.pending} בתור</span>` : ''}</div>
+    </div>`).join('') : '<p class="muted pad">אין שיחות. מייל שתשלח, וגם תשובה שתתקבל, יופיעו כאן.</p>';
+  $('#mail-list').querySelectorAll('.mrow').forEach((el) => el.addEventListener('click', () => { mailSel = +el.dataset.id; renderMail(true); }));
+  if (mailSel && (forceThread || !$('#mail-thread .thread'))) await renderThread(mailSel);
+  else if (!mailSel) $('#mail-thread').innerHTML = '<p class="muted pad">בחר שיחה מהרשימה, או כתוב מייל חדש.</p>';
+}
+
+async function renderThread(leadId) {
+  const { lead, items } = await api(`/leads/${leadId}/thread`);
+  const lastIn = [...items].reverse().find((i) => i.dir === 'in');
+  const subj = (lastIn || items[items.length - 1] || {}).subject || '';
+  const emailable = !lead.unsubscribed && !lead.bounced;
+  $('#mail-thread').innerHTML = `<div class="thread">
+    <div class="th-head">
+      <div><h2>${esc(lead.name)}</h2><div class="muted" dir="ltr">${esc(lead.email)}${lead.company ? ` · ${esc(lead.company)}` : ''}</div></div>
+      <div class="th-acts"><span class="pill" style="--c:var(--s-${lead.stage})">${STAGE_LABELS[lead.stage]}</span>
+        <button class="btn sm" data-t="card">פתח כרטיס</button><button class="btn sm danger" data-t="del">מחיקה</button></div>
+    </div>
+    <div class="th-body">${items.length ? items.map((i) => `
+      <div class="bub ${i.dir}">
+        <div class="bh"><span class="kind ${i.kind}">${KIND_LABEL[i.kind] || ''}</span>${MSTATUS[i.status] ? `<span class="flag warn">${MSTATUS[i.status]}</span>` : ''}${i.opened ? '<span class="flag good">נפתח</span>' : ''}${i.clicked ? '<span class="flag good">לחיצה</span>' : ''}<time>${fmt(i.at)}</time></div>
+        ${i.subject ? `<div class="bs" dir="auto">${esc(i.subject)}</div>` : ''}
+        <div class="bb" dir="auto">${esc(i.body || '')}</div>
+      </div>`).join('') : '<p class="muted pad">עוד לא נשלח או התקבל מייל מהליד הזה.</p>'}</div>
+    ${emailable ? `<form class="th-reply" id="th-form">
+      <input name="subject" placeholder="נושא" value="${esc(subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '')}" required>
+      <textarea name="body" rows="5" placeholder="${lastIn ? 'כתוב תשובה…' : 'כתוב מייל…'}" required></textarea>
+      <div class="logrow"><span class="muted">החתימה נוספת אוטומטית. המייל יישלח בדקה הקרובה.</span><button class="btn primary">${lastIn ? 'שלח תשובה' : 'שלח'}</button></div>
+    </form>` : '<p class="muted pad">הליד הסיר את עצמו או שהכתובת חוזרת, לא ניתן לשלוח לו.</p>'}
+  </div>`;
+  const body = $('#mail-thread .th-body');
+  body.scrollTop = body.scrollHeight;
+  $('#mail-thread [data-t="card"]').onclick = () => openLead(leadId);
+  $('#mail-thread [data-t="del"]').onclick = () => confirmDelete([leadId], lead.name);
+  const f = $('#th-form');
+  if (f) f.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api(`/leads/${leadId}/email`, { method: 'POST', body: Object.fromEntries(new FormData(f)) });
+      toast('המייל בתור ויישלח בדקה הקרובה');
+      renderMail(true);
+    } catch (err) { fail(err); }
+  };
+}
+$('#mail-q').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => renderMail(), 250); });
+$('#mail-filters').addEventListener('click', (e) => { if (e.target.dataset.f) { mailFilter = e.target.dataset.f; renderMail(); } });
 
 // ---------------- Stats ----------------
 async function renderStats() {
@@ -607,7 +711,7 @@ $('#set-prev').onclick = async () => {
 
 // ---------------- Wiring ----------------
 let view = 'board';
-const views = { followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
+const views = { mail: renderMail, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
 function refreshView() { views[view]().catch(fail); }
 function show(v) {
   view = v;
@@ -628,6 +732,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawe
 $('#logout').onclick = async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login'; };
 $('#new-seq').onclick = () => editSequence(null);
 $('#stats-days').onchange = renderStats;
+$('#bulk-del').onclick = () => {
+  const ids = [...document.querySelectorAll('.sel:checked')].map((c) => +c.value);
+  if (!ids.length) return toast('סמן לידים למחיקה', true);
+  confirmDelete(ids, `${ids.length} לידים`);
+};
 let deb;
 ['#board-q', '#f-q'].forEach((s) => $(s).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refreshView, 250); }));
 ['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country'].forEach((s) => $(s).addEventListener('change', renderLeads));
@@ -649,6 +758,7 @@ $('#bulk-enroll').onclick = async () => {
   ({ csrf } = await r.json());
   await loadMeta();
   renderFollowups().catch(() => {});
+  api('/mailbox').then((rows) => { const n = rows.filter((r) => r.awaiting).length; const b = $('#mail-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   let saved = 'followups';
   try { saved = localStorage.getItem('crm.view') || 'board'; } catch { /* ignore */ }

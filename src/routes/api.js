@@ -371,6 +371,56 @@ router.delete('/sequences/:id', wrap(async (req, res) => {
   res.status(204).end();
 }));
 
+// ---------- Mailbox: one conversation per lead (campaign, personal and received mail) ----------
+const MAIL_ACTS = ['REPLY_IN', 'MANUAL_EMAIL_OUT'];
+const snip = (t) => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+const mailItems = (msgs, acts) => [
+  ...msgs.map((m) => ({ dir: 'out', kind: m.enrollmentId ? 'campaign' : 'manual', subject: m.subject, body: m.body, at: m.sentAt || m.createdAt, status: m.status, opened: !!m.openedAt, clicked: !!m.clickedAt, leadId: m.leadId })),
+  ...acts.map((a) => ({ dir: a.type === 'REPLY_IN' ? 'in' : 'out', kind: a.type === 'REPLY_IN' ? 'reply' : 'logged', subject: (a.data || {}).subject || '', body: (a.data || {}).body || '', at: a.createdAt, status: 'SENT', leadId: a.leadId })),
+].sort((a, b) => new Date(a.at) - new Date(b.at));
+const MSG_SEL = { leadId: true, subject: true, body: true, enrollmentId: true, status: true, createdAt: true, sentAt: true, openedAt: true, clickedAt: true };
+const MSG_OK = { in: ['SENT', 'QUEUED', 'SENDING', 'DRAFT'] };
+
+router.get('/mailbox', wrap(async (_req, res) => {
+  const [msgs, acts] = await Promise.all([
+    prisma.emailMessage.findMany({ where: { status: { in: MSG_OK.in } }, orderBy: { createdAt: 'desc' }, take: 800, select: MSG_SEL }),
+    prisma.activity.findMany({ where: { type: { in: MAIL_ACTS } }, orderBy: { createdAt: 'desc' }, take: 800, select: { leadId: true, type: true, data: true, createdAt: true } }),
+  ]);
+  const byLead = new Map();
+  mailItems(msgs, acts).forEach((it) => {
+    const c = byLead.get(it.leadId) || { leadId: it.leadId, replies: 0, sent: 0, campaign: 0, pending: 0, last: null };
+    if (it.dir === 'in') c.replies += 1; else c.sent += 1;
+    if (it.kind === 'campaign') c.campaign += 1;
+    if (it.status !== 'SENT') c.pending += 1;
+    c.last = it; // ascending order, so the last assignment is the newest
+    byLead.set(it.leadId, c);
+  });
+  const rows = await prisma.lead.findMany({ where: { id: { in: [...byLead.keys()] } }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, nextAction: true, unsubscribed: true, bounced: true } });
+  const out = rows.map((l) => {
+    const c = byLead.get(l.id);
+    return { lead: l, replies: c.replies, sent: c.sent, campaign: c.campaign, pending: c.pending, awaiting: l.replied && l.nextAction === 'להשיב', last: { dir: c.last.dir, kind: c.last.kind, subject: c.last.subject, snippet: snip(c.last.body), at: c.last.at } };
+  }).sort((a, b) => new Date(b.last.at) - new Date(a.last.at));
+  res.json(out);
+}));
+
+router.get('/leads/:id/thread', wrap(async (req, res) => {
+  const leadId = id(req.params.id);
+  const [lead, msgs, acts] = await Promise.all([
+    prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, unsubscribed: true, bounced: true } }),
+    prisma.emailMessage.findMany({ where: { leadId, status: { in: MSG_OK.in } }, orderBy: { createdAt: 'asc' }, select: MSG_SEL }),
+    prisma.activity.findMany({ where: { leadId, type: { in: MAIL_ACTS } }, orderBy: { createdAt: 'asc' }, select: { leadId: true, type: true, data: true, createdAt: true } }),
+  ]);
+  if (!lead) return res.status(404).json({ error: 'not_found' });
+  res.json({ lead, items: mailItems(msgs, acts) });
+}));
+
+router.post('/leads/bulk-delete', wrap(async (req, res) => {
+  const ids = (Array.isArray(req.body && req.body.ids) ? req.body.ids : []).map((v) => id(v));
+  if (!ids.length) return res.status(400).json({ error: 'no_ids' });
+  const r = await prisma.lead.deleteMany({ where: { id: { in: ids } } });
+  res.json({ deleted: r.count });
+}));
+
 // ---------- Stats ----------
 router.get('/stats', wrap(async (req, res) => {
   const days = Math.min(parseInt(req.query.days, 10) || 30, 365);

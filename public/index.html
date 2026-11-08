@@ -12,10 +12,11 @@
   <div class="brand">◆ CRM</div>
   <nav id="tabs">
     <button data-view="followups">היום <span id="fu-count" class="badge hidden"></span></button>
+    <button data-view="mail">דואר <span id="mail-count" class="badge hidden"></span></button>
     <button data-view="board" class="active">לוח</button>
-    <button data-view="outbox">תור שליחה <span id="ob-count" class="badge hidden"></span></button>
     <button data-view="leads">לידים</button>
-    <button data-view="sequences">רצפי מיילים</button>
+    <button data-view="sequences">קמפיינים</button>
+    <button data-view="outbox">אישור קמפיין <span id="ob-count" class="badge hidden"></span></button>
     <button data-view="stats">סטטיסטיקה</button>
     <button data-view="import">ייבוא</button>
     <button data-view="settings">הגדרות</button>
@@ -24,6 +25,21 @@
 </header>
 
 <main>
+  <section id="view-mail" class="view hidden">
+    <div class="toolbar wrap">
+      <button class="btn primary" data-action="compose">✉ מייל חדש</button>
+      <button class="btn" data-action="paste-reply">↩ תשובה שהתקבלה</button>
+      <input id="mail-q" placeholder="חיפוש שיחה…">
+      <div class="seg" id="mail-filters">
+        <button data-f="all" class="on">הכל</button><button data-f="await">ממתינות למענה</button><button data-f="replied">התקבלה תשובה</button><button data-f="campaign">קמפיין</button><button data-f="manual">אישי</button>
+      </div>
+    </div>
+    <div class="mail">
+      <aside id="mail-list" class="mail-list"></aside>
+      <div id="mail-thread" class="mail-thread"><p class="muted pad">בחר שיחה מהרשימה, או כתוב מייל חדש.</p></div>
+    </div>
+  </section>
+
   <section id="view-followups" class="view hidden">
     <div class="toolbar">
       <button class="btn primary" data-action="compose">✉ מייל חדש</button>
@@ -37,7 +53,7 @@
     <div class="toolbar">
       <button class="btn" data-action="compose">✉ מייל חדש</button>
       <button class="btn primary" id="ob-approve-all">אשר הכל ושלח</button>
-      <span class="muted">מיילים מרצפים ממתינים כאן לאישור. אפשר לערוך, לראות תצוגה מקדימה, לאשר או לבטל. מיילים שאושרו נשלחים בדקה הקרובה.</span>
+      <span class="muted">מיילים מקמפיינים ממתינים כאן לאישור. אפשר לערוך, לראות תצוגה מקדימה, לאשר או לבטל. מיילים שאושרו נשלחים בדקה הקרובה.</span>
     </div>
     <div id="ob-list" class="cards"></div>
   </section>
@@ -84,18 +100,19 @@
       <span class="spacer"></span>
       <select id="bulk-seq"><option value="">הוסף מסומנים לרצף…</option></select>
       <button class="btn" id="bulk-enroll">הוסף</button>
+      <button class="btn danger" id="bulk-del">מחק מסומנים</button>
       <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
     </div>
     <div class="table-wrap">
       <table class="tbl">
-        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>שם</th><th>אימייל</th><th>חברה</th><th>מדינה</th><th>עד׳</th><th>שלב</th><th>מקור</th><th>תגיות</th><th>פעילות אחרונה</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>שם</th><th>אימייל</th><th>חברה</th><th>מדינה</th><th>עד׳</th><th>שלב</th><th>מקור</th><th>תגיות</th><th>פעילות אחרונה</th><th></th></tr></thead>
         <tbody id="leads-body"></tbody>
       </table>
     </div>
   </section>
 
   <section id="view-sequences" class="view hidden">
-    <div class="toolbar"><button class="btn primary" id="new-seq">+ רצף חדש</button></div>
+    <div class="toolbar"><button class="btn primary" id="new-seq">+ קמפיין חדש</button><span class="muted">קמפיין = רצף מיילים אוטומטי לרשימת לידים. מייל אישי ותשובות נמצאים בטאב "דואר".</span></div>
     <div id="seq-list" class="cards"></div>
   </section>
 
