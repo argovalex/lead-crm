@@ -414,6 +414,26 @@ router.get('/leads/:id/thread', wrap(async (req, res) => {
   res.json({ lead, items: mailItems(msgs, acts) });
 }));
 
+// One-off email to several selected leads (not a campaign): each gets its own queued message,
+// a timeline entry, and the usual follow-up reminder after it is sent.
+router.post('/leads/bulk-email', wrap(async (req, res) => {
+  const ids = (Array.isArray(req.body && req.body.ids) ? req.body.ids : []).map((v) => id(v));
+  const { subject, body } = req.body || {};
+  if (!ids.length) return res.status(400).json({ error: 'no_ids' });
+  if (!subject || !body) return res.status(400).json({ error: 'subject_and_body_required' });
+  if (ids.length > 200) return res.status(400).json({ error: 'too_many_recipients' });
+  let queued = 0;
+  const skipped = [];
+  for (const leadId of ids) {
+    try {
+      const msg = await email.queueSingle(leadId, subject, body);
+      await leads.logActivity(leadId, 'EMAIL_QUEUED', { messageId: msg.id, subject: msg.subject });
+      queued += 1;
+    } catch (e) { skipped.push({ id: leadId, reason: e.message }); }
+  }
+  res.status(202).json({ queued, skipped });
+}));
+
 router.post('/leads/bulk-delete', wrap(async (req, res) => {
   const ids = (Array.isArray(req.body && req.body.ids) ? req.body.ids : []).map((v) => id(v));
   if (!ids.length) return res.status(400).json({ error: 'no_ids' });

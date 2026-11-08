@@ -190,3 +190,5 @@ details.dd>summary{cursor:pointer;font-weight:600}
 .lrow{grid-template-columns:minmax(150px,2fr) minmax(120px,2fr) 170px 110px minmax(80px,1fr) 40px 110px}
 .lrow .c-del{padding:2px 6px}
 @media(max-width:900px){.mail{grid-template-columns:1fr}.mail-list{max-height:260px}.thread{height:auto}.th-body{max-height:50vh}.lrow{grid-template-columns:1fr 1fr}.bub{max-width:94%}}
+
+.rcpts{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}

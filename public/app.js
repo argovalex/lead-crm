@@ -517,6 +517,26 @@ function editSequence(seq) {
   };
 }
 
+// ---------------- One email to several selected leads ----------------
+function bulkMailModal(ids) {
+  const rows = [...document.querySelectorAll('#leads-body tr[data-id]')].filter((tr) => ids.includes(+tr.dataset.id));
+  const names = rows.map((tr) => tr.children[1].textContent.trim());
+  const form = modal(`<h3>מייל ל-${ids.length} לידים</h3>
+    <div class="rcpts">${names.slice(0, 12).map((n) => `<span class="flag">${esc(n)}</span>`).join('')}${names.length > 12 ? `<span class="flag">+${names.length - 12}</span>` : ''}</div>
+    <p class="muted">זה מייל בודד ולא קמפיין: כל ליד מקבל מייל משלו, הוא נרשם בציר הזמן שלו, ואחרי השליחה נוצר לו מעקב ל-5 ימים. תשובות יופיעו בטאב "דואר". לידים שהסירו את עצמם או שהכתובת שלהם חוזרת ידולגו.</p>
+    <label>נושא<input name="subject" required></label>
+    <label>תוכן, משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="9" required></textarea></label>
+    ${INSERT_BAR('')}
+    <div class="logrow"><button type="button" class="btn" data-preview="">👁 תצוגה מקדימה</button><button type="button" class="btn" data-test="">✉ שלח לי בדיקה</button></div>`, async (fd) => {
+    const r = await api('/leads/bulk-email', { method: 'POST', body: { ids, subject: fd.subject, body: fd.body } });
+    toast(`${r.queued} מיילים בתור${r.skipped.length ? ` · ${r.skipped.length} דולגו` : ''}`);
+    refreshView();
+  }, `שליחה ל-${ids.length}`);
+  const first = form.querySelector('[name="subject"]');
+  form.insertAdjacentHTML('beforeend', `<input type="hidden" name="leadId" value="${ids[0]}">`);
+  first.focus();
+}
+
 // ---------------- Delete (one or many) ----------------
 function confirmDelete(ids, label) {
   modal(`<h3>מחיקה</h3><p>למחוק ${esc(label)}? יימחקו גם היסטוריית המיילים והתיעוד של הליד. אי אפשר לשחזר.</p>`, async () => {
@@ -732,6 +752,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawe
 $('#logout').onclick = async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login'; };
 $('#new-seq').onclick = () => editSequence(null);
 $('#stats-days').onchange = renderStats;
+$('#bulk-mail').onclick = () => {
+  const ids = [...document.querySelectorAll('.sel:checked')].map((c) => +c.value);
+  if (!ids.length) return toast('סמן לידים לשליחה', true);
+  bulkMailModal(ids);
+};
 $('#bulk-del').onclick = () => {
   const ids = [...document.querySelectorAll('.sel:checked')].map((c) => +c.value);
   if (!ids.length) return toast('סמן לידים למחיקה', true);
