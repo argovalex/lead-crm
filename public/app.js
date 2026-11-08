@@ -189,7 +189,7 @@ async function openLead(id) {
     <section>
       <h4>תיעוד אינטראקציה</h4>
       <form id="d-log" style="display:flex;flex-direction:column;gap:6px">
-        <div class="logrow"><select name="kind">${Object.entries(KINDS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select><input name="at" type="date" value="${dayStr(new Date())}"></div>
+        <div class="logrow"><select name="kind" required><option value="">בחר סוג…</option>${Object.entries(KINDS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select><input name="at" type="date" value="${dayStr(new Date())}"></div>
         <input name="subject" placeholder="נושא (אופציונלי)">
         <textarea name="body" rows="4" placeholder="הדבק כאן את תוכן המייל / ההודעה / סיכום השיחה"></textarea>
         <div class="logrow"><input name="followUpDays" type="number" min="0" placeholder="מעקב בעוד X ימים (ברירת מחדל לפי הסוג)"><button class="btn primary">תעד</button></div>
