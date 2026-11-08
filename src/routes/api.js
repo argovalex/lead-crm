@@ -116,6 +116,23 @@ router.get('/followups', wrap(async (_req, res) => {
   res.json(rows);
 }));
 
+// Write a new email to any address: finds or creates the lead, then queues the message.
+router.post('/compose', wrap(async (req, res) => {
+  const { email: to, name, company, subject, body } = req.body || {};
+  const addr = leads.normEmail(to);
+  if (!leads.isEmail(addr)) return res.status(400).json({ error: 'invalid_email' });
+  if (!subject || !body) return res.status(400).json({ error: 'subject_and_body_required' });
+  let lead = await prisma.lead.findUnique({ where: { email: addr } });
+  let created = false;
+  if (!lead) {
+    lead = await leads.createLead({ name: name || company || addr.split('@')[0], email: addr, company, source: 'manual outreach' });
+    created = true;
+  }
+  const msg = await email.queueSingle(lead.id, subject, body);
+  await leads.logActivity(lead.id, 'EMAIL_QUEUED', { messageId: msg.id, subject: msg.subject });
+  res.status(202).json({ queued: msg.id, leadId: lead.id, created });
+}));
+
 router.post('/leads/:id/replied', wrap(async (req, res) => {
   await leads.markReplied(id(req.params.id), { source: 'manual' });
   res.json({ ok: true });

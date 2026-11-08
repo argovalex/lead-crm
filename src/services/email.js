@@ -153,6 +153,10 @@ async function dispatch(now = new Date(), db = prisma, provider = getProvider())
       await db.emailMessage.update({ where: { id }, data: { status: 'SENT', sentAt: now, providerId, lockedAt: null, subject: built.subject } });
       await leads.logActivity(lead.id, 'EMAIL_SENT', { messageId: id, subject: built.subject, step: msg.stepIndex }, db, now);
       await leads.advanceStageTo(lead.id, 'CONTACTED', 'auto:email_sent', db, now);
+      if (!msg.enrollmentId) {
+        // A manually written email: the "reply" task is done; schedule the next follow-up.
+        await db.lead.update({ where: { id: lead.id }, data: { nextAction: 'מעקב', nextFollowUpAt: new Date(now.getTime() + 5 * DAY) } });
+      }
       sent += 1;
     } catch (e) {
       const final = msg.attempts >= MAX_ATTEMPTS;

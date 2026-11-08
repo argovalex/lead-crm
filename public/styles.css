@@ -125,7 +125,22 @@ dialog::backdrop{background:rgba(0,0,0,.3)}
 .fu-item{background:#fff;border:1px solid #dde3e0;border-radius:10px;padding:12px;margin-bottom:10px;cursor:pointer}
 .fu-item.over{border-color:#c0392b}
 .fu-item .snip{margin-top:6px;font-size:13px;color:#445;white-space:pre-wrap;max-height:4.5em;overflow:hidden}
-.timeline .body{margin-top:4px;font-size:13px;color:#445;white-space:pre-wrap;border-inline-start:3px solid #dde3e0;padding-inline-start:8px}
+.timeline .body{unicode-bidi:plaintext;text-align:start;margin-top:4px;font-size:13px;color:#445;white-space:pre-wrap;border-inline-start:3px solid #dde3e0;padding-inline-start:8px}
 .timeline .body.in{border-color:#1f6f54}
 .logrow{display:flex;gap:6px;flex-wrap:wrap}
 .logrow select,.logrow input{flex:1;min-width:120px}
+
+.insrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:-4px}
+details.dd{margin:14px 0;border:1px solid #dde3e0;border-radius:8px;padding:8px 12px}
+details.dd>summary{cursor:pointer;font-weight:600}
+
+.kpis2{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.kpis2 .k{background:#fff;border:1px solid #dde3e0;border-radius:10px;padding:10px 16px;min-width:130px;cursor:pointer}
+.kpis2 .k b{display:block;font-size:24px}
+.kpis2 .k.red b{color:#c0392b}
+.fu-group{margin-bottom:22px}
+.fu-group h3{margin:0 0 8px;font-size:16px}
+.fu-group h3 .count{color:var(--muted,#667);font-weight:400;font-size:13px}
+.fu-item .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.fu-item .who{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.fu-item .snip{unicode-bidi:plaintext;text-align:start}

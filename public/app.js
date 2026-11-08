@@ -162,7 +162,7 @@ async function openLead(id) {
     const d = a.data || {};
     if (a.type === 'STAGE_CHANGED') return `${STAGE_LABELS[d.from]} ← ${STAGE_LABELS[d.to]} <span class="muted">(${REASONS[d.reason] || esc(d.reason)})</span>`;
     if (a.type === 'NOTE') return esc(d.text);
-    if (d.manual) return `${d.subject ? `"${esc(d.subject)}"` : ''}${d.body ? `<div class="body ${['REPLY_IN', 'SMS_IN'].includes(a.type) ? 'in' : ''}">${esc(d.body)}</div>` : ''}`;
+    if (d.manual) return `${d.subject ? `<span dir="auto" style="unicode-bidi:plaintext">"${esc(d.subject)}"</span>` : ''}${d.body ? `<div dir="auto" class="body ${['REPLY_IN', 'SMS_IN'].includes(a.type) ? 'in' : ''}">${esc(d.body)}</div>` : ''}`;
     if (d.subject) return `"${esc(d.subject)}"`;
     if (d.name) return esc(d.name);
     if (d.link) return esc(d.link);
@@ -177,6 +177,30 @@ async function openLead(id) {
       <div><h2>${esc(l.name)}</h2><div class="muted">${esc(l.email)}</div>${flagsHtml(l)}</div>
       <button class="btn ghost" id="d-close" aria-label="סגור">✕</button>
     </div>
+    <div class="actions">
+      <button class="btn primary" id="d-email" ${emailable ? '' : 'disabled'}>✉ כתוב מייל</button>
+      <select id="d-seq" ${emailable ? '' : 'disabled'}><option value="">הוסף לרצף…</option>${sequences.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
+      <button class="btn" id="d-replied">↩ סמן שהשיב</button>
+      <button class="btn" id="d-unenroll">עצור רצפים</button>
+      <button class="btn danger" id="d-del">מחיקה</button>
+    </div>
+    <section><h4>ציר זמן</h4><ul class="timeline">${l.activities.map((a) => `
+      <li><span class="ic">${(ACT[a.type] || ['•'])[0]}</span><div><b>${(ACT[a.type] || [, a.type])[1]}</b> ${actText(a)}<time>${fmt(a.createdAt)}</time></div></li>`).join('')}</ul></section>
+    <section>
+      <h4>תיעוד אינטראקציה</h4>
+      <form id="d-log" style="display:flex;flex-direction:column;gap:6px">
+        <div class="logrow"><select name="kind">${Object.entries(KINDS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select><input name="at" type="date" value="${dayStr(new Date())}"></div>
+        <input name="subject" placeholder="נושא (אופציונלי)">
+        <textarea name="body" rows="4" placeholder="הדבק כאן את תוכן המייל / ההודעה / סיכום השיחה"></textarea>
+        <div class="logrow"><input name="followUpDays" type="number" min="0" placeholder="מעקב בעוד X ימים (ברירת מחדל לפי הסוג)"><button class="btn primary">תעד</button></div>
+      </form>
+    </section>
+    <section>
+      <h4>הוספת הערה</h4>
+      <form id="d-note" style="display:flex;gap:8px"><input name="text" placeholder="סיכום שיחה, משימה…" style="flex:1" required><button class="btn">הוסף</button></form>
+    </section>
+    <section><h4>רצפים</h4>${enr}</section>
+    <details class="dd"><summary>פרטי הליד ועריכה</summary>
     <form id="d-form">
       <div class="row">
         <label>שם<input name="name" value="${esc(l.name)}" required></label>
@@ -196,31 +220,10 @@ async function openLead(id) {
       </div>
       <div class="actions"><button class="btn primary">שמירה</button></div>
     </form>
-    <div class="actions">
-      <button class="btn" id="d-email" ${emailable ? '' : 'disabled'}>✉ שליחת מייל</button>
-      <select id="d-seq" ${emailable ? '' : 'disabled'}><option value="">הוסף לרצף…</option>${sequences.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
-      <button class="btn" id="d-replied">↩ סמן שהשיב</button>
-      <button class="btn" id="d-unenroll">עצור רצפים</button>
-      <button class="btn danger" id="d-del">מחיקה</button>
-    </div>
-    <section><h4>רצפים</h4>${enr}</section>
-    <section>
-      <h4>תיעוד אינטראקציה</h4>
-      <form id="d-log" style="display:flex;flex-direction:column;gap:6px">
-        <div class="logrow"><select name="kind">${Object.entries(KINDS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select><input name="at" type="date" value="${dayStr(new Date())}"></div>
-        <input name="subject" placeholder="נושא (אופציונלי)">
-        <textarea name="body" rows="4" placeholder="הדבק כאן את תוכן המייל / ההודעה / סיכום השיחה"></textarea>
-        <div class="logrow"><input name="followUpDays" type="number" min="0" placeholder="מעקב בעוד X ימים (ברירת מחדל לפי הסוג)"><button class="btn primary">תעד</button></div>
-      </form>
-    </section>
-    <section>
-      <h4>הוספת הערה</h4>
-      <form id="d-note" style="display:flex;gap:8px"><input name="text" placeholder="סיכום שיחה, משימה…" style="flex:1" required><button class="btn">הוסף</button></form>
-    </section>
-    <section><h4>ציר זמן</h4><ul class="timeline">${l.activities.map((a) => `
-      <li><span class="ic">${(ACT[a.type] || ['•'])[0]}</span><div><b>${(ACT[a.type] || [, a.type])[1]}</b> ${actText(a)}<time>${fmt(a.createdAt)}</time></div></li>`).join('')}</ul></section>`;
+    </details>`;
 
   $('#drawer').classList.remove('hidden');
+  $('#drawer').scrollTop = 0; $('#drawer-body').scrollTop = 0;
   $('#scrim').classList.remove('hidden');
   $('#d-close').onclick = closeDrawer;
   const refresh = () => { openLead(id); refreshView(); };
@@ -249,17 +252,31 @@ async function openLead(id) {
     if (!e.target.value) return;
     try { await api(`/leads/${id}/enroll`, { method: 'POST', body: { sequenceId: +e.target.value } }); toast('נוסף לרצף'); refresh(); } catch (err) { fail(err); e.target.value = ''; }
   };
-  $('#d-email').onclick = () => modal(`
-    <h3>מייל ל-${esc(l.name)}</h3>
-    <input type="hidden" name="leadId" value="${l.id}">
+  $('#d-email').onclick = () => composeModal(l);
+}
+
+
+const INSERT_BAR = (i = '') => `<div class="insrow"><button type="button" class="btn ghost sm" data-ins="link" data-for="${i}">🔗 הוסף קישור</button><button type="button" class="btn ghost sm" data-ins="video" data-for="${i}">▶ הוסף סרטון YouTube</button></div>`;
+
+// Compose an email. With a lead: send to it. Without: ask for the address (creates the lead if new).
+function composeModal(lead, prefill = {}) {
+  const form = modal(`<h3>${lead ? `מייל ל-${esc(lead.name)}` : 'מייל חדש'}</h3>
+    ${lead ? `<input type="hidden" name="leadId" value="${lead.id}">` : `
+    <label>אימייל הנמען<input name="email" type="email" dir="ltr" required></label>
+    <label>שם (אם הליד חדש)<input name="name"></label>
+    <label>חברה (אם הליד חדש)<input name="company"></label>`}
     <label>נושא<input name="subject" required></label>
-    <label>תוכן — משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="8" required></textarea></label>
-    <p class="muted">קישור: הדבק כתובת, או [טקסט](https://...). סרטון YouTube: [video:https://youtu.be/XXXX] יוצג כתמונה שנפתחת בלחיצה. החתימה נוספת אוטומטית.</p>
+    <label>תוכן — משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="9" required></textarea></label>
+    ${INSERT_BAR('')}
+    <p class="muted">קישור: הדבק כתובת, או השתמש בכפתורים. סרטון YouTube יוצג כתמונה שנפתחת בלחיצה. החתימה נוספת אוטומטית.</p>
     <div class="logrow"><button type="button" class="btn" data-preview="">👁 תצוגה מקדימה</button><button type="button" class="btn" data-test="">✉ שלח לי בדיקה</button></div>`, async (fd) => {
-    await api(`/leads/${id}/email`, { method: 'POST', body: fd });
-    toast('המייל בתור לשליחה');
-    refresh();
+    if (lead) await api(`/leads/${lead.id}/email`, { method: 'POST', body: fd });
+    else await api('/compose', { method: 'POST', body: fd });
+    toast('המייל בתור ויישלח בדקה הקרובה');
+    refreshView();
+    if (lead) openLead(lead.id);
   }, 'שליחה');
+  if (prefill.subject) form.querySelector('[name="subject"]').value = prefill.subject;
 }
 
 // ---------------- Modal helper ----------------
@@ -273,6 +290,20 @@ function modal(html, onSubmit, okText = 'שמירה') {
     try { await onSubmit(Object.fromEntries(new FormData(form)), form); dlg.close(); } catch (err) { fail(err); }
   };
   form.onclick = async (e) => {
+    const ins = e.target.closest('[data-ins]');
+    if (ins) {
+      e.preventDefault();
+      const field = form.querySelector(`[name="${ins.dataset.for === '' ? 'body' : `b${ins.dataset.for}`}"]`);
+      const url = prompt(ins.dataset.ins === 'video' ? 'כתובת הסרטון ביוטיוב (למשל https://youtu.be/XXXX):' : 'כתובת הקישור (https://...):');
+      if (!url) return;
+      let snippet = url;
+      if (ins.dataset.ins === 'video') snippet = `[video:${url}]`;
+      else { const label = prompt('טקסט הקישור (אפשר להשאיר ריק ולהציג את הכתובת):'); if (label) snippet = `[${label}](${url})`; }
+      const a = field.selectionStart ?? field.value.length;
+      field.value = `${field.value.slice(0, a)}${snippet}${field.value.slice(field.selectionEnd ?? a)}`;
+      field.focus();
+      return;
+    }
     const pv = e.target.closest('[data-preview]');
     const ts = e.target.closest('[data-test]');
     if (!pv && !ts) return;
@@ -314,25 +345,89 @@ function newLead() {
   });
 }
 
-// ---------------- Follow-ups ----------------
-async function renderFollowups() {
-  const rows = await api('/followups');
-  const due = rows.filter((l) => fuState(l) === 'over').length;
-  const b = $('#fu-count');
-  b.textContent = due;
-  b.classList.toggle('hidden', !due);
-  $('#fu-list').innerHTML = rows.length ? rows.map((l) => {
-    const last = (l.activities || [])[0];
-    const d = (last && last.data) || {};
-    return `<div class="fu-item ${fuState(l) === 'over' ? 'over' : ''}" data-id="${l.id}">
-      <b>${esc(l.name)}</b> <span class="muted">${esc(l.company || l.email)}${l.country ? ` · ${esc(l.country)}` : ''}</span>
+// ---------------- Today (reply / follow up) ----------------
+const endOfToday = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; };
+const dateHe = (d) => new Date(d).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+
+function todayItem(l, group) {
+  const last = (l.activities || [])[0];
+  const d = (last && last.data) || {};
+  const over = new Date(l.nextFollowUpAt) < new Date(new Date().setHours(0, 0, 0, 0));
+  return `<div class="fu-item ${over ? 'over' : ''}" data-id="${l.id}" data-subject="${esc(d.subject || '')}">
+    <div class="who"><b>${esc(l.name)}</b><span class="muted">${esc(l.company || l.email)}${l.country ? ` · ${esc(l.country)}` : ''}</span>
       <span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span>
-      <div><b>${esc(l.nextAction || 'מעקב')}</b> · ${new Date(l.nextFollowUpAt).toLocaleDateString('he-IL')}${fuState(l) === 'over' ? ' <span class="flag bad">באיחור</span>' : ''}</div>
-      ${last ? `<div class="muted">${(ACT[last.type] || [, last.type])[1]} · ${fmt(last.createdAt)}</div>` : ''}
-      ${d.body ? `<div class="snip">${esc(d.body)}</div>` : ''}</div>`;
-  }).join('') : '<p class="muted">אין מעקבים פתוחים.</p>';
-  $('#fu-list').querySelectorAll('.fu-item').forEach((el) => el.addEventListener('click', () => openLead(+el.dataset.id)));
+      ${l.priority ? `<span class="flag">${esc(l.priority)}</span>` : ''}</div>
+    <div><b>${esc(l.nextAction || 'מעקב')}</b> · ${dateHe(l.nextFollowUpAt)}${over ? ' <span class="flag bad">באיחור</span>' : ''}</div>
+    ${last ? `<div class="muted">${(ACT[last.type] || [, last.type])[1]} · ${fmt(last.createdAt)}${d.subject ? ` · <span dir="auto">${esc(d.subject)}</span>` : ''}</div>` : ''}
+    ${d.body ? `<div class="snip" dir="auto">${esc(d.body.slice(0, 280))}${d.body.length > 280 ? '…' : ''}</div>` : ''}
+    <div class="acts">
+      <button class="btn sm primary" data-a="reply">✉ ${group === 'reply' ? 'השב' : 'כתוב מייל'}</button>
+      <button class="btn sm" data-a="open">פתח כרטיס</button>
+      <button class="btn sm" data-a="done">✓ טופל</button>
+      <button class="btn sm" data-a="snooze3">דחה 3 ימים</button>
+      <button class="btn sm" data-a="snooze7">דחה שבוע</button>
+    </div></div>`;
 }
+
+async function renderFollowups() {
+  const [rows, outbox] = await Promise.all([api('/followups'), api('/outbox').catch(() => [])]);
+  const drafts = outbox.filter((m) => m.status === 'DRAFT').length;
+  const eod = endOfToday();
+  const week = new Date(eod.getTime() + 7 * 86400000);
+  const reply = rows.filter((l) => l.replied && l.nextAction === 'להשיב');
+  const rest = rows.filter((l) => !reply.includes(l));
+  const dueToday = rest.filter((l) => new Date(l.nextFollowUpAt) <= eod);
+  const soon = rest.filter((l) => new Date(l.nextFollowUpAt) > eod && new Date(l.nextFollowUpAt) <= week);
+  const later = rest.filter((l) => new Date(l.nextFollowUpAt) > week);
+  const overdueN = [...reply, ...dueToday].filter((l) => new Date(l.nextFollowUpAt) < new Date(new Date().setHours(0, 0, 0, 0))).length;
+
+  const b = $('#fu-count');
+  const urgent = reply.length + dueToday.length + drafts;
+  b.textContent = urgent;
+  b.classList.toggle('hidden', !urgent);
+
+  const group = (title, items, kind, emptyMsg) => `<div class="fu-group"><h3>${title} <span class="count">${items.length}</span></h3>
+    ${items.length ? items.map((l) => todayItem(l, kind)).join('') : `<p class="muted">${emptyMsg}</p>`}</div>`;
+
+  $('#today').innerHTML = `
+    <div class="kpis2">
+      <div class="k ${reply.length ? 'red' : ''}"><b>${reply.length}</b>להשיב</div>
+      <div class="k ${dueToday.length ? 'red' : ''}"><b>${dueToday.length}</b>מעקב להיום</div>
+      <div class="k ${overdueN ? 'red' : ''}"><b>${overdueN}</b>באיחור</div>
+      <div class="k" data-go="outbox"><b>${drafts}</b>ממתינים לאישור</div>
+      <div class="k"><b>${soon.length}</b>ב-7 הימים הקרובים</div>
+    </div>
+    ${group('להשיב עכשיו', reply, 'reply', 'אין תשובות שממתינות למענה. כשמגיעה תשובה היא תופיע כאן.')}
+    ${group('מעקב להיום ובאיחור', dueToday, 'follow', 'אין מעקבים להיום.')}
+    ${group('בשבוע הקרוב', soon, 'follow', 'אין מעקבים בשבוע הקרוב.')}
+    ${later.length ? group('מאוחר יותר', later, 'follow', '') : ''}
+    <p class="muted">כל מייל שנשלח (גם ידנית) מוסיף אוטומטית מעקב ל-5 ימים. מיילים שנשלחו מחוץ למערכת: "✉ מייל שנשלח", ותשובות: "↩ תשובה שהתקבלה".</p>`;
+}
+
+$('#today').addEventListener('click', async (e) => {
+  const go = e.target.closest('[data-go]');
+  if (go) return show(go.dataset.go);
+  const btn = e.target.closest('[data-a]');
+  if (!btn) return;
+  const card = btn.closest('[data-id]');
+  const leadId = +card.dataset.id;
+  try {
+    if (btn.dataset.a === 'open') return openLead(leadId);
+    if (btn.dataset.a === 'reply') {
+      const lead = await api(`/leads/${leadId}`);
+      const subj = card.dataset.subject;
+      return composeModal(lead, { subject: subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '' });
+    }
+    if (btn.dataset.a === 'done') await api(`/leads/${leadId}`, { method: 'PATCH', body: { nextFollowUpAt: null, nextAction: '' } });
+    if (btn.dataset.a === 'snooze3' || btn.dataset.a === 'snooze7') {
+      const days = btn.dataset.a === 'snooze3' ? 3 : 7;
+      const d = new Date(Date.now() + days * 86400000);
+      await api(`/leads/${leadId}`, { method: 'PATCH', body: { nextFollowUpAt: d.toISOString(), nextAction: 'מעקב' } });
+    }
+    toast('עודכן');
+    renderFollowups();
+  } catch (err) { fail(err); }
+});
 
 function interactionModal(kind) {
   const inbound = kind === 'EMAIL_IN';
@@ -379,7 +474,7 @@ function editSequence(seq) {
     <div class="hdr"><b>צעד ${i + 1}</b> · יום <input type="number" min="0" name="d${i}" value="${s.delayDays}" required>
     <button type="button" class="btn ghost sm" data-preview="${i}">👁 תצוגה</button><button type="button" class="btn ghost sm" data-test="${i}">✉ בדיקה אליי</button><button type="button" class="btn ghost sm" data-rm="${i}">הסר</button></div>
     <input name="s${i}" placeholder="נושא — למשל: היי {{first_name}}" value="${esc(s.subject)}" required>
-    <textarea name="b${i}" rows="4" placeholder="תוכן המייל" required>${esc(s.body)}</textarea></div>`;
+    <textarea name="b${i}" rows="4" placeholder="תוכן המייל" required>${esc(s.body)}</textarea>${INSERT_BAR(i)}</div>`;
   const form = modal(`<h3>${seq ? 'עריכת רצף' : 'רצף חדש'}</h3>
     <label>שם הרצף<input name="name" value="${esc(seq?.name)}" required></label>
     <div id="steps" style="display:flex;flex-direction:column;gap:10px">${steps.map(stepHtml).join('')}</div>
@@ -531,6 +626,7 @@ function show(v) {
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.view) show(e.target.dataset.view); });
 document.addEventListener('click', (e) => {
   if (e.target.closest('[data-action="new-lead"]')) newLead();
+  if (e.target.closest('[data-action="compose"]')) composeModal(null);
   if (e.target.closest('[data-action="paste-reply"]')) interactionModal('EMAIL_IN');
   if (e.target.closest('[data-action="log-sent"]')) interactionModal('EMAIL_OUT');
 });

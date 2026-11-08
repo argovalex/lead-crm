@@ -11,7 +11,7 @@
 <header class="top">
   <div class="brand">◆ CRM</div>
   <nav id="tabs">
-    <button data-view="followups">מעקבים <span id="fu-count" class="badge hidden"></span></button>
+    <button data-view="followups">היום <span id="fu-count" class="badge hidden"></span></button>
     <button data-view="board" class="active">לוח</button>
     <button data-view="outbox">תור שליחה <span id="ob-count" class="badge hidden"></span></button>
     <button data-view="leads">לידים</button>
@@ -26,15 +26,16 @@
 <main>
   <section id="view-followups" class="view hidden">
     <div class="toolbar">
-      <button class="btn primary" data-action="paste-reply">↩ תשובה שהתקבלה</button>
+      <button class="btn primary" data-action="compose">✉ מייל חדש</button>
+      <button class="btn" data-action="paste-reply">↩ תשובה שהתקבלה</button>
       <button class="btn" data-action="log-sent">✉ מייל שנשלח</button>
-      <span class="muted">מעקבים שהגיע זמנם, ותשובות שמחכות למענה.</span>
     </div>
-    <div id="fu-list" class="cards"></div>
+    <div id="today"></div>
   </section>
 
   <section id="view-outbox" class="view hidden">
     <div class="toolbar">
+      <button class="btn" data-action="compose">✉ מייל חדש</button>
       <button class="btn primary" id="ob-approve-all">אשר הכל ושלח</button>
       <span class="muted">מיילים מרצפים ממתינים כאן לאישור. אפשר לערוך, לראות תצוגה מקדימה, לאשר או לבטל. מיילים שאושרו נשלחים בדקה הקרובה.</span>
     </div>
@@ -58,6 +59,7 @@
   <section id="view-board" class="view hidden">
     <div class="toolbar">
       <input id="board-q" placeholder="חיפוש…">
+      <button class="btn primary" data-action="compose">✉ מייל חדש</button>
       <button class="btn" data-action="paste-reply">↩ תשובה שהתקבלה</button>
       <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
     </div>
