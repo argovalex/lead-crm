@@ -157,6 +157,10 @@ async function loadMeta() {
 // ---------------- Lead drawer ----------------
 function closeDrawer() { $('#drawer').classList.add('hidden'); $('#scrim').classList.add('hidden'); }
 
+const NEXT_ACTIONS = ['שיחת טלפון', 'שליחת מייל', 'פגישה', 'לשלוח הצעה', 'מעקב', 'להשיב'];
+const NEXT_ICON = (a) => (/טלפון|שיחה/.test(a || '') ? '☎' : /פגישה/.test(a || '') ? '🤝' : /מייל|להשיב|הצעה/.test(a || '') ? '✉' : '⏰');
+const isCallAction = (a) => /טלפון|שיחה/.test(a || '');
+
 async function openLead(id) {
   const l = await api(`/leads/${id}`);
   const actText = (a) => {
@@ -185,6 +189,21 @@ async function openLead(id) {
       <button class="btn" id="d-unenroll">עצור רצפים</button>
       <button class="btn danger" id="d-del">מחיקה</button>
     </div>
+    <section class="nextstep"><h4>הצעד הבא</h4>
+      <div class="ns-state ${fuState(l) === 'over' ? 'over' : ''}">${l.nextFollowUpAt ? `${NEXT_ICON(l.nextAction)} <b>${esc(l.nextAction || 'מעקב')}</b> · ${dateHe(l.nextFollowUpAt)}${fuState(l) === 'over' ? ' · באיחור' : ''}<span class="muted"> · מופיע בטאב "היום"</span>` : '<span class="muted">אין צעד מתוכנן</span>'}</div>
+      <form id="d-next">
+        <div class="logrow">
+          <select name="stage" aria-label="שלב">${STAGES.map((s) => `<option value="${s}" ${s === l.stage ? 'selected' : ''}>${STAGE_LABELS[s]}</option>`).join('')}</select>
+          <input name="nextAction" list="ns-opts" value="${esc(l.nextAction)}" placeholder="פעולה: שיחת טלפון, פגישה…" autocomplete="off">
+          <datalist id="ns-opts">${NEXT_ACTIONS.map((a) => `<option value="${a}">`).join('')}</datalist>
+        </div>
+        <div class="logrow">
+          <input name="nextFollowUpAt" type="date" value="${dayStr(l.nextFollowUpAt)}" aria-label="תאריך">
+          <span class="chips"><button type="button" class="btn sm" data-d="0">היום</button><button type="button" class="btn sm" data-d="1">מחר</button><button type="button" class="btn sm" data-d="3">+3</button><button type="button" class="btn sm" data-d="7">שבוע</button></span>
+        </div>
+        <div class="logrow"><span class="muted">עדכון שלב, פעולה ותאריך מופיע מיד ב"היום" ובכרטיס.</span><button class="btn primary">שמירה</button></div>
+      </form>
+    </section>
     <section><h4>ציר זמן</h4><ul class="timeline">${l.activities.map((a) => `
       <li><span class="ic">${(ACT[a.type] || ['•'])[0]}</span><div><b>${(ACT[a.type] || [, a.type])[1]}</b> ${actText(a)}<time>${fmt(a.createdAt)}</time></div></li>`).join('')}</ul></section>
     <section>
@@ -229,6 +248,21 @@ async function openLead(id) {
   $('#d-close').onclick = closeDrawer;
   const refresh = () => { openLead(id); refreshView(); };
 
+  $('#d-next').onclick = (e) => {
+    const b = e.target.closest('[data-d]');
+    if (b) $('#d-next [name="nextFollowUpAt"]').value = dayStr(new Date(Date.now() + Number(b.dataset.d) * 86400000));
+  };
+  $('#d-next').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = Object.fromEntries(new FormData(e.target));
+    if (fd.nextAction && !fd.nextFollowUpAt) fd.nextFollowUpAt = dayStr(new Date());
+    try {
+      await api(`/leads/${id}`, { method: 'PATCH', body: fd });
+      toast('נשמר');
+      refresh();
+      if (view !== 'followups') renderFollowups().catch(() => {});
+    } catch (err) { fail(err); }
+  };
   $('#d-form').onsubmit = async (e) => {
     e.preventDefault();
     try { await api(`/leads/${id}`, { method: 'PATCH', body: Object.fromEntries(new FormData(e.target)) }); toast('נשמר'); refresh(); } catch (err) { fail(err); }
@@ -372,10 +406,10 @@ function todayItem(l, group) {
   return `<div class="fu-item ${over ? 'over' : ''}" data-id="${l.id}" data-subject="${esc(d.subject || '')}">
     <span class="c-name"><b>${esc(l.name)}</b><span class="muted">${esc(l.company || l.email)}${l.country ? ` · ${esc(l.country)}` : ''}</span></span>
     <span class="c-stage"><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span>${l.priority ? ` <span class="flag">${esc(l.priority)}</span>` : ''}</span>
-    <span class="c-fu ${over ? 'over' : ''}">${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}${over ? ' <span class="flag bad">באיחור</span>' : ''}</span>
+    <span class="c-fu ${over ? 'over' : ''}">${NEXT_ICON(l.nextAction)} ${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}${over ? ' <span class="flag bad">באיחור</span>' : ''}</span>
     <span class="c-note muted" dir="auto" title="${esc(d.body ? d.body.slice(0, 400) : note)}">${esc(note)}</span>
     <span class="acts">
-      <button class="btn sm primary" data-a="reply">${group === 'reply' ? 'השב' : 'מייל'}</button>
+      ${isCallAction(l.nextAction) ? (l.phone ? `<a class="btn sm primary" href="tel:${esc(l.phone.replace(/[^\d+]/g, ''))}" dir="ltr">☎ ${esc(l.phone)}</a>` : '<button class="btn sm primary" data-a="open" title="אין טלפון בכרטיס">☎ הוסף טלפון</button>') : `<button class="btn sm primary" data-a="reply">${group === 'reply' ? 'השב' : 'מייל'}</button>`}
       <button class="btn sm" data-a="done" title="טופל">✓</button>
       <button class="btn sm" data-a="snooze3" title="דחה 3 ימים">+3</button>
       <button class="btn sm" data-a="snooze7" title="דחה שבוע">+7</button>
