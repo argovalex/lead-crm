@@ -163,6 +163,15 @@ async function dispatch(now = new Date(), db = prisma, provider = getProvider())
   return { sent, failed, capped: false };
 }
 
+// Plain-text body of a received email; falls back to stripped HTML. Null when unavailable.
+async function fetchBody(emailId) {
+  const m = await require('./provider').fetchReceived(emailId);
+  if (!m) return null;
+  if (m.text) return m.text.trim();
+  if (m.html) return m.html.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<br\s*\/?>|<\/p>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  return null;
+}
+
 // Webhook event handling (Resend event shapes). Deduplicated by svix-id.
 async function handleEvent(eventId, event, db = prisma, now = new Date()) {
   try {
@@ -174,10 +183,18 @@ async function handleEvent(eventId, event, db = prisma, now = new Date()) {
   const d = event.data || {};
 
   if (event.type === 'email.received') {
-    const from = leads.normEmail(typeof d.from === 'string' ? (d.from.match(/<([^>]+)>/) || [, d.from])[1] : d.from?.email);
-    const lead = from && (await db.lead.findUnique({ where: { email: from } }));
-    if (lead) await leads.markReplied(lead.id, { source: 'inbound', db, now });
-    return { handled: !!lead };
+    const raw = typeof d.from === 'string' ? d.from : d.from?.email || '';
+    const from = leads.normEmail((raw.match(/<([^>]+)>/) || [, raw])[1]);
+    const name = (raw.match(/^\s*"?([^"<]+?)"?\s*</) || [, ''])[1].trim() || undefined;
+    if (!leads.isEmail(from)) return { handled: false };
+    // Skip our own addresses and automatic mailer messages (bounces are handled by email.bounced).
+    if (/^(mailer-daemon|postmaster|noreply|no-reply)@/.test(from) || from.endsWith('@alargov.com') || from.endsWith('@reply.alargov.com')) return { handled: false, skipped: true };
+    const body = await fetchBody(d.email_id);
+    const res = await leads.logInteractionByEmail({
+      email: from, name, kind: 'EMAIL_IN', at: now, subject: d.subject || null,
+      body: body ? body.slice(0, 8000) : null, source: 'inbound reply',
+    }, db);
+    return { handled: true, leadId: res.leadId, created: res.created };
   }
 
   const msg = d.email_id && (await db.emailMessage.findUnique({ where: { providerId: d.email_id } }));

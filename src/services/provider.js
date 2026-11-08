@@ -40,6 +40,25 @@ function mockProvider() {
   };
 }
 
+// Resend's email.received webhook carries metadata only; the body is fetched separately.
+// Best effort: returns { text, html } or null (never throws).
+async function fetchReceived(emailId) {
+  if (!emailId || config.emailProvider === 'mock' || !config.resendApiKey) return null;
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 8000);
+    const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`, {
+      headers: { Authorization: `Bearer ${config.resendApiKey}` }, signal: ctl.signal,
+    });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return { text: j.text || null, html: j.html || null };
+  } catch {
+    return null;
+  }
+}
+
 let instance;
 function getProvider() {
   if (!instance) instance = config.emailProvider === 'mock' ? mockProvider() : resendProvider();
@@ -60,4 +79,4 @@ function verifyWebhook(rawBody, headers, secret = config.webhookSecret) {
   return JSON.parse(rawBody);
 }
 
-module.exports = { getProvider, setProvider, mockProvider, verifyWebhook };
+module.exports = { getProvider, setProvider, mockProvider, verifyWebhook, fetchReceived };

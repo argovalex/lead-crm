@@ -264,3 +264,24 @@ test('manual outreach: logged email creates lead, CONTACTED, follow-up +5d; repl
   const types = (await prisma.activity.findMany({ where: { leadId: lead.id } })).map((a) => a.type);
   assert.ok(types.includes('MANUAL_EMAIL_OUT') && types.includes('REPLY_IN'));
 });
+
+test('inbound webhook from unknown sender creates a lead, logs subject, ENGAGED; own-domain mail is skipped', async () => {
+  const app = createApp();
+  const wh = new Webhook(process.env.WEBHOOK_SECRET);
+  const post = async (id, data) => {
+    const payload = JSON.stringify({ type: 'email.received', data });
+    const ts = new Date();
+    return request(app).post('/webhooks/email').set({
+      'content-type': 'application/json', 'svix-id': id, 'svix-timestamp': String(Math.floor(ts / 1000)), 'svix-signature': wh.sign(id, ts, payload),
+    }).send(payload);
+  };
+  assert.equal((await post('in_1', { from: 'Fotini Kanat <info@mgyachts.gr>', subject: 'Re: VHF refresher' })).status, 200);
+  const lead = await prisma.lead.findUnique({ where: { email: 'info@mgyachts.gr' } });
+  assert.equal(lead.name, 'Fotini Kanat');
+  assert.equal(lead.stage, 'ENGAGED');
+  const act = await prisma.activity.findFirst({ where: { leadId: lead.id, type: 'REPLY_IN' } });
+  assert.equal(act.data.subject, 'Re: VHF refresher');
+
+  assert.equal((await post('in_2', { from: 'alex@alargov.com', subject: 'x' })).status, 200);
+  assert.equal(await prisma.lead.findUnique({ where: { email: 'alex@alargov.com' } }), null);
+});
