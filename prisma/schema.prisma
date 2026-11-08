@@ -41,6 +41,12 @@ model Lead {
   tags           String[]     @default([])
   notes          String?
   owner          String?
+  country        String?
+  segment        String?
+  priority       String?
+  website        String?
+  nextAction     String?
+  nextFollowUpAt DateTime?
   stage          Stage        @default(NEW)
   unsubscribed   Boolean      @default(false)
   unsubToken     String       @unique
@@ -55,6 +61,7 @@ model Lead {
 
   @@index([stage])
   @@index([lastActivityAt])
+  @@index([nextFollowUpAt])
 }
 
 model Activity {

@@ -11,6 +11,7 @@
 <header class="top">
   <div class="brand">◆ CRM</div>
   <nav id="tabs">
+    <button data-view="followups">מעקבים <span id="fu-count" class="badge hidden"></span></button>
     <button data-view="board" class="active">לוח</button>
     <button data-view="leads">לידים</button>
     <button data-view="sequences">רצפי מיילים</button>
@@ -21,9 +22,19 @@
 </header>
 
 <main>
-  <section id="view-board" class="view">
+  <section id="view-followups" class="view hidden">
+    <div class="toolbar">
+      <button class="btn primary" data-action="paste-reply">↩ תשובה שהתקבלה</button>
+      <button class="btn" data-action="log-sent">✉ מייל שנשלח</button>
+      <span class="muted">מעקבים שהגיע זמנם, ותשובות שמחכות למענה.</span>
+    </div>
+    <div id="fu-list" class="cards"></div>
+  </section>
+
+  <section id="view-board" class="view hidden">
     <div class="toolbar">
       <input id="board-q" placeholder="חיפוש…">
+      <button class="btn" data-action="paste-reply">↩ תשובה שהתקבלה</button>
       <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
     </div>
     <div class="board" id="board"></div>
@@ -35,6 +46,8 @@
       <select id="f-stage"><option value="">כל השלבים</option></select>
       <select id="f-tag"><option value="">כל התגיות</option></select>
       <select id="f-source"><option value="">כל המקורות</option></select>
+      <select id="f-priority"><option value="">כל העדיפויות</option><option>A</option><option>B</option><option>C</option></select>
+      <select id="f-country"><option value="">כל המדינות</option></select>
       <select id="f-inactive">
         <option value="">כל פעילות</option>
         <option value="7">ללא פעילות 7+ ימים</option>
@@ -49,7 +62,7 @@
     </div>
     <div class="table-wrap">
       <table class="tbl">
-        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>שם</th><th>אימייל</th><th>חברה</th><th>שלב</th><th>מקור</th><th>תגיות</th><th>פעילות אחרונה</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>שם</th><th>אימייל</th><th>חברה</th><th>מדינה</th><th>עד׳</th><th>שלב</th><th>מקור</th><th>תגיות</th><th>פעילות אחרונה</th></tr></thead>
         <tbody id="leads-body"></tbody>
       </table>
     </div>
@@ -77,6 +90,17 @@
         <button class="btn primary">ייבוא</button>
       </form>
       <div id="import-result"></div>
+    </div>
+    <div class="panel">
+      <h2>ייבוא מיילים שכבר נשלחו ידנית</h2>
+      <p class="muted">CSV עם העמודות: email (חובה), sent_at (תאריך השליחה, למשל 2026-11-04), subject, name, company, country, segment, priority. ליד שלא קיים ייווצר, והמייל יתועד עם התאריך האמיתי, השלב יעבור ל"נוצר קשר" ותיקבע תזכורת מעקב ל-5 ימים אחרי השליחה. ליד שכבר מתועד לא יתועד פעמיים.</p>
+      <form id="sent-form">
+        <input type="file" name="file" accept=".csv,text/csv" required>
+        <input name="subject" placeholder="נושא ברירת מחדל (אופציונלי)">
+        <input name="sentAt" type="date">
+        <button class="btn primary">ייבוא</button>
+      </form>
+      <div id="sent-result"></div>
     </div>
   </section>
 </main>

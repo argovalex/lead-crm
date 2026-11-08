@@ -243,3 +243,24 @@ test('stale leads are flagged after N days without activity', async () => {
   await leads.logActivity(l.id, 'NOTE', { text: 'called' });
   assert.equal((await prisma.lead.findUnique({ where: { id: l.id } })).stale, false);
 });
+
+test('manual outreach: logged email creates lead, CONTACTED, follow-up +5d; reply -> ENGAGED, replied, due +2d, sequences stopped', async () => {
+  const sent = new Date('2026-11-04T12:00:00Z');
+  const out = await leads.logInteractionByEmail({ email: 'Info@MGYachts.gr', company: 'MG Yachts', country: 'Greece', kind: 'EMAIL_OUT', at: sent, subject: 'VHF refresher', body: 'Dear Mary' });
+  assert.equal(out.created, true);
+  let lead = await prisma.lead.findUnique({ where: { id: out.leadId } });
+  assert.equal(lead.email, 'info@mgyachts.gr');
+  assert.equal(lead.stage, 'CONTACTED');
+  assert.equal(lead.nextFollowUpAt.getTime(), sent.getTime() + 5 * DAY);
+
+  const reply = new Date('2026-11-05T09:00:00Z');
+  const again = await leads.logInteractionByEmail({ email: 'info@mgyachts.gr', kind: 'EMAIL_IN', at: reply, body: 'Sounds interesting' });
+  assert.equal(again.created, false);
+  lead = await prisma.lead.findUnique({ where: { id: out.leadId } });
+  assert.equal(lead.stage, 'ENGAGED');
+  assert.equal(lead.replied, true);
+  assert.equal(lead.nextAction, 'להשיב');
+  assert.equal(lead.nextFollowUpAt.getTime(), reply.getTime() + 2 * DAY);
+  const types = (await prisma.activity.findMany({ where: { leadId: lead.id } })).map((a) => a.type);
+  assert.ok(types.includes('MANUAL_EMAIL_OUT') && types.includes('REPLY_IN'));
+});

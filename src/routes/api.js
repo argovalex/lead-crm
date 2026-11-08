@@ -13,12 +13,14 @@ const id = (v) => {
   if (!Number.isInteger(n) || n <= 0) throw Object.assign(new Error('invalid_id'), { status: 400 });
   return n;
 };
-const EDITABLE = ['name', 'phone', 'company', 'source', 'notes', 'owner'];
+const EDITABLE = ['name', 'phone', 'company', 'source', 'notes', 'owner', 'country', 'segment', 'priority', 'website', 'nextAction'];
 
 // ---------- Leads ----------
 router.get('/leads', wrap(async (req, res) => {
-  const { stage, tag, source, q, inactiveDays, stale } = req.query;
+  const { stage, tag, source, q, inactiveDays, stale, priority, country } = req.query;
   const where = {};
+  if (priority) where.priority = priority;
+  if (country) where.country = country;
   if (stage) where.stage = stage;
   if (tag) where.tags = { has: tag };
   if (source) where.source = source;
@@ -30,11 +32,12 @@ router.get('/leads', wrap(async (req, res) => {
 }));
 
 router.get('/leads/meta', wrap(async (_req, res) => {
-  const [sources, tags] = await Promise.all([
+  const [sources, tags, countries] = await Promise.all([
     prisma.lead.findMany({ where: { source: { not: null } }, distinct: ['source'], select: { source: true } }),
     prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS tag FROM "Lead" ORDER BY 1`,
+    prisma.lead.findMany({ where: { country: { not: null } }, distinct: ['country'], select: { country: true }, orderBy: { country: 'asc' } }),
   ]);
-  res.json({ stages: leads.STAGES, sources: sources.map((s) => s.source), tags: tags.map((t) => t.tag) });
+  res.json({ stages: leads.STAGES, sources: sources.map((s) => s.source), tags: tags.map((t) => t.tag), countries: countries.map((c) => c.country) });
 }));
 
 router.post('/leads', wrap(async (req, res) => {
@@ -63,6 +66,11 @@ router.patch('/leads/:id', wrap(async (req, res) => {
   const data = {};
   for (const k of EDITABLE) if (k in req.body) data[k] = req.body[k] || null;
   if ('name' in data && !data.name) return res.status(400).json({ error: 'name_required' });
+  if ('nextFollowUpAt' in req.body) {
+    const d = req.body.nextFollowUpAt ? new Date(req.body.nextFollowUpAt) : null;
+    if (d && Number.isNaN(d.getTime())) return res.status(400).json({ error: 'invalid_date' });
+    data.nextFollowUpAt = d;
+  }
   if ('tags' in req.body) data.tags = leads.normTags(req.body.tags);
   const lead = await prisma.lead.update({ where: { id: leadId }, data });
   if (req.body.stage) await leads.changeStage(leadId, req.body.stage);
@@ -83,6 +91,26 @@ router.post('/leads/:id/notes', wrap(async (req, res) => {
   if (!text) return res.status(400).json({ error: 'text_required' });
   await leads.logActivity(id(req.params.id), 'NOTE', { text });
   res.status(201).json({ ok: true });
+}));
+
+// Log an interaction that happened outside the system (kind: EMAIL_OUT|EMAIL_IN|SMS_OUT|SMS_IN|CALL|MEETING).
+router.post('/leads/:id/log', wrap(async (req, res) => {
+  res.status(201).json(await leads.logInteraction(id(req.params.id), req.body));
+}));
+
+// Same by email address; creates the lead if unknown. Used for pasting a received reply.
+router.post('/interactions', wrap(async (req, res) => {
+  res.status(201).json(await leads.logInteractionByEmail(req.body));
+}));
+
+// Leads that need action: follow-up due or overdue, plus replies awaiting an answer.
+router.get('/followups', wrap(async (_req, res) => {
+  const rows = await prisma.lead.findMany({
+    where: { nextFollowUpAt: { not: null }, stage: { notIn: ['WON', 'LOST'] }, unsubscribed: false },
+    orderBy: { nextFollowUpAt: 'asc' }, take: 500,
+    include: { activities: { where: { type: { in: ['REPLY_IN', 'SMS_IN', 'MANUAL_EMAIL_OUT', 'SMS_OUT', 'CALL', 'MEETING', 'NOTE'] } }, orderBy: { createdAt: 'desc' }, take: 1 } },
+  });
+  res.json(rows);
 }));
 
 router.post('/leads/:id/replied', wrap(async (req, res) => {
@@ -126,6 +154,10 @@ const HEADER_MAP = {
   tags: 'tags', 'תגיות': 'tags',
   notes: 'notes', 'הערות': 'notes',
   owner: 'owner', 'אחראי': 'owner',
+  country: 'country', 'מדינה': 'country', segment: 'segment', 'סגמנט': 'segment',
+  priority: 'priority', 'עדיפות': 'priority', website: 'website', 'אתר': 'website',
+  sent_at: 'sent_at', 'sent at': 'sent_at', date: 'sent_at', 'תאריך': 'sent_at', 'תאריך שליחה': 'sent_at',
+  subject: 'subject', 'נושא': 'subject',
 };
 
 router.post('/import', upload.single('file'), wrap(async (req, res) => {
@@ -154,6 +186,44 @@ router.post('/import', upload.single('file'), wrap(async (req, res) => {
     } catch (e) {
       if (e.code === 'P2002') result.duplicates.push({ row, email: em });
       else result.invalid.push({ row, reason: e.message });
+    }
+  }
+  res.json(result);
+}));
+
+// ---------- Import emails already sent by hand ----------
+// CSV: email (required), sent_at (date), subject, name, company, country, segment, priority, notes.
+// Creates the lead when missing, logs a manual outbound email with the real date, stage -> CONTACTED.
+router.post('/import-sent', upload.single('file'), wrap(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'file_required' });
+  let records;
+  try {
+    records = parse(req.file.buffer.toString('utf8').replace(/^﻿/, ''), {
+      columns: (h) => h.map((c) => HEADER_MAP[String(c).trim().toLowerCase()] || null),
+      skip_empty_lines: true, trim: true, relax_column_count: true,
+    });
+  } catch (e) {
+    return res.status(400).json({ error: 'invalid_csv', detail: e.message });
+  }
+  const result = { logged: 0, created: 0, skipped: [], invalid: [] };
+  for (const [i, r] of records.entries()) {
+    const row = i + 2;
+    const em = leads.normEmail(r.email);
+    if (!leads.isEmail(em)) { result.invalid.push({ row, reason: 'invalid_email' }); continue; }
+    try {
+      const existing = await prisma.lead.findUnique({ where: { email: em } });
+      if (existing && !req.body.allowRepeat) {
+        const dup = await prisma.activity.findFirst({ where: { leadId: existing.id, type: 'MANUAL_EMAIL_OUT' } });
+        if (dup) { result.skipped.push({ row, email: em, reason: 'already_logged' }); continue; }
+      }
+      const out = await leads.logInteractionByEmail({
+        ...r, email: em, kind: 'EMAIL_OUT', at: r.sent_at || req.body.sentAt || undefined,
+        subject: r.subject || req.body.subject, source: r.source || req.body.source || 'manual outreach',
+      });
+      result.logged += 1;
+      if (out.created) result.created += 1;
+    } catch (e) {
+      result.invalid.push({ row, reason: e.message });
     }
   }
   res.json(result);

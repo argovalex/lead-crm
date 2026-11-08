@@ -6,9 +6,12 @@ const ACT = {
   EMAIL_QUEUED: ['⧗', 'מייל בתור'], EMAIL_SENT: ['✉', 'מייל נשלח'], EMAIL_DELIVERED: ['✓', 'נמסר'],
   EMAIL_OPENED: ['👁', 'נפתח'], EMAIL_CLICKED: ['↗', 'לחיצה על קישור'], EMAIL_REPLIED: ['↩', 'השיב'],
   EMAIL_BOUNCED: ['✕', 'חזר (bounce)'], EMAIL_COMPLAINED: ['⚠', 'סומן כספאם'], EMAIL_FAILED: ['✕', 'שליחה נכשלה'],
+  MANUAL_EMAIL_OUT: ['✉', 'מייל שנשלח (ידני)'], REPLY_IN: ['↩', 'תשובה התקבלה'], SMS_OUT: ['💬', 'SMS נשלח'], SMS_IN: ['💬', 'SMS התקבל'],
+  CALL: ['☎', 'שיחה'], MEETING: ['🤝', 'פגישה'],
   UNSUBSCRIBED: ['⊘', 'הסיר עצמו מהתפוצה'], SEQUENCE_ENROLLED: ['▶', 'נוסף לרצף'], STALE_FLAGGED: ['⏸', 'סומן כרדום'],
 };
-const REASONS = { manual: 'ידני', 'auto:email_sent': 'אוטומטי · נשלח מייל', 'auto:click': 'אוטומטי · לחיצה', 'auto:reply': 'אוטומטי · תשובה' };
+const KINDS = { EMAIL_OUT: 'מייל שנשלחתי (ידני)', EMAIL_IN: 'תשובה במייל שהתקבלה', SMS_OUT: 'SMS שנשלח', SMS_IN: 'SMS שהתקבל', CALL: 'שיחה', MEETING: 'פגישה' };
+const REASONS = { 'auto:manual_outreach': 'אוטומטי · מייל ידני', manual: 'ידני', 'auto:email_sent': 'אוטומטי · נשלח מייל', 'auto:click': 'אוטומטי · לחיצה', 'auto:reply': 'אוטומטי · תשובה' };
 
 let csrf = '';
 let meta = { stages: STAGES, sources: [], tags: [] };
@@ -16,6 +19,8 @@ let sequences = [];
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (d) => (d ? new Date(d).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : '');
+const dayStr = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+const fuState = (l) => (!l.nextFollowUpAt ? null : new Date(l.nextFollowUpAt) <= new Date() ? 'over' : 'ok');
 const ago = (d) => {
   const m = Math.round((Date.now() - new Date(d)) / 60000);
   if (m < 60) return `לפני ${m} ד׳`;
@@ -76,6 +81,7 @@ async function renderBoard() {
           <div class="n">${esc(l.name)}</div>
           <div class="meta">${esc(l.company || l.email)}</div>
           <div class="meta">${ago(l.lastActivityAt)}</div>
+          ${l.nextFollowUpAt ? `<div class="fu ${fuState(l)}">${esc(l.nextAction || 'מעקב')} · ${new Date(l.nextFollowUpAt).toLocaleDateString('he-IL')}</div>` : ''}
           ${flagsHtml(l)}
         </div>`).join('')}</div></div>`;
   }).join('');
@@ -113,16 +119,18 @@ async function renderLeads() {
   if (v('#f-tag')) p.set('tag', v('#f-tag'));
   if (v('#f-source')) p.set('source', v('#f-source'));
   if (v('#f-inactive')) p.set('inactiveDays', v('#f-inactive'));
+  if (v('#f-priority')) p.set('priority', v('#f-priority'));
+  if (v('#f-country')) p.set('country', v('#f-country'));
   if ($('#f-stale').checked) p.set('stale', 'true');
   const rows = await api(`/leads?${p}`);
   $('#leads-body').innerHTML = rows.length ? rows.map((l) => `
     <tr data-id="${l.id}">
       <td><input type="checkbox" class="sel" value="${l.id}"></td>
-      <td>${esc(l.name)}</td><td>${esc(l.email)}</td><td>${esc(l.company)}</td>
+      <td>${esc(l.name)}</td><td>${esc(l.email)}</td><td>${esc(l.company)}</td><td>${esc(l.country)}</td><td>${esc(l.priority)}</td>
       <td><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span></td>
       <td>${esc(l.source)}</td><td>${(l.tags || []).map(esc).join(', ')}</td>
       <td title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}${l.stale ? ' <span class="flag warn">רדום</span>' : ''}</td>
-    </tr>`).join('') : '<tr><td colspan="8" class="muted">אין לידים תואמים</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="10" class="muted">אין לידים תואמים</td></tr>';
   $('#leads-body').querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', (e) => {
     if (e.target.matches('input')) return;
     openLead(+tr.dataset.id);
@@ -139,6 +147,7 @@ async function loadMeta() {
   fill('#f-stage', STAGES, (s) => STAGE_LABELS[s]);
   fill('#f-tag', meta.tags);
   fill('#f-source', meta.sources);
+  fill('#f-country', meta.countries || []);
   sequences = await api('/sequences');
   fill('#bulk-seq', sequences.map((s) => String(s.id)), (id) => sequences.find((s) => String(s.id) === id).name);
 }
@@ -152,6 +161,7 @@ async function openLead(id) {
     const d = a.data || {};
     if (a.type === 'STAGE_CHANGED') return `${STAGE_LABELS[d.from]} ← ${STAGE_LABELS[d.to]} <span class="muted">(${REASONS[d.reason] || esc(d.reason)})</span>`;
     if (a.type === 'NOTE') return esc(d.text);
+    if (d.manual) return `${d.subject ? `"${esc(d.subject)}"` : ''}${d.body ? `<div class="body ${['REPLY_IN', 'SMS_IN'].includes(a.type) ? 'in' : ''}">${esc(d.body)}</div>` : ''}`;
     if (d.subject) return `"${esc(d.subject)}"`;
     if (d.name) return esc(d.name);
     if (d.link) return esc(d.link);
@@ -174,6 +184,12 @@ async function openLead(id) {
         <label>חברה<input name="company" value="${esc(l.company)}"></label>
         <label>מקור<input name="source" value="${esc(l.source)}"></label>
         <label>אחראי<input name="owner" value="${esc(l.owner)}"></label>
+        <label>מדינה<input name="country" value="${esc(l.country)}"></label>
+        <label>סגמנט<input name="segment" value="${esc(l.segment)}"></label>
+        <label>עדיפות<select name="priority"><option value=""></option>${['A', 'B', 'C'].map((x) => `<option ${l.priority === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+        <label>אתר<input name="website" value="${esc(l.website)}" dir="ltr"></label>
+        <label>הפעולה הבאה<input name="nextAction" value="${esc(l.nextAction)}" placeholder="למשל: לשלוח הצעה"></label>
+        <label>תאריך מעקב<input name="nextFollowUpAt" type="date" value="${dayStr(l.nextFollowUpAt)}"></label>
         <label class="full">תגיות (מופרדות בפסיק)<input name="tags" value="${esc((l.tags || []).join(', '))}"></label>
         <label class="full">הערות<textarea name="notes" rows="2">${esc(l.notes)}</textarea></label>
       </div>
@@ -187,6 +203,15 @@ async function openLead(id) {
       <button class="btn danger" id="d-del">מחיקה</button>
     </div>
     <section><h4>רצפים</h4>${enr}</section>
+    <section>
+      <h4>תיעוד אינטראקציה</h4>
+      <form id="d-log" style="display:flex;flex-direction:column;gap:6px">
+        <div class="logrow"><select name="kind">${Object.entries(KINDS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select><input name="at" type="date" value="${dayStr(new Date())}"></div>
+        <input name="subject" placeholder="נושא (אופציונלי)">
+        <textarea name="body" rows="4" placeholder="הדבק כאן את תוכן המייל / ההודעה / סיכום השיחה"></textarea>
+        <div class="logrow"><input name="followUpDays" type="number" min="0" placeholder="מעקב בעוד X ימים (ברירת מחדל לפי הסוג)"><button class="btn primary">תעד</button></div>
+      </form>
+    </section>
     <section>
       <h4>הוספת הערה</h4>
       <form id="d-note" style="display:flex;gap:8px"><input name="text" placeholder="סיכום שיחה, משימה…" style="flex:1" required><button class="btn">הוסף</button></form>
@@ -202,6 +227,12 @@ async function openLead(id) {
   $('#d-form').onsubmit = async (e) => {
     e.preventDefault();
     try { await api(`/leads/${id}`, { method: 'PATCH', body: Object.fromEntries(new FormData(e.target)) }); toast('נשמר'); refresh(); } catch (err) { fail(err); }
+  };
+  $('#d-log').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = Object.fromEntries(new FormData(e.target));
+    if (fd.at) fd.at = `${fd.at}T12:00:00`;
+    try { await api(`/leads/${id}/log`, { method: 'POST', body: fd }); toast('תועד'); refresh(); } catch (err) { fail(err); }
   };
   $('#d-note').onsubmit = async (e) => {
     e.preventDefault();
@@ -257,6 +288,45 @@ function newLead() {
     refreshView();
     openLead(l.id);
   });
+}
+
+// ---------------- Follow-ups ----------------
+async function renderFollowups() {
+  const rows = await api('/followups');
+  const due = rows.filter((l) => fuState(l) === 'over').length;
+  const b = $('#fu-count');
+  b.textContent = due;
+  b.classList.toggle('hidden', !due);
+  $('#fu-list').innerHTML = rows.length ? rows.map((l) => {
+    const last = (l.activities || [])[0];
+    const d = (last && last.data) || {};
+    return `<div class="fu-item ${fuState(l) === 'over' ? 'over' : ''}" data-id="${l.id}">
+      <b>${esc(l.name)}</b> <span class="muted">${esc(l.company || l.email)}${l.country ? ` · ${esc(l.country)}` : ''}</span>
+      <span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span>
+      <div><b>${esc(l.nextAction || 'מעקב')}</b> · ${new Date(l.nextFollowUpAt).toLocaleDateString('he-IL')}${fuState(l) === 'over' ? ' <span class="flag bad">באיחור</span>' : ''}</div>
+      ${last ? `<div class="muted">${(ACT[last.type] || [, last.type])[1]} · ${fmt(last.createdAt)}</div>` : ''}
+      ${d.body ? `<div class="snip">${esc(d.body)}</div>` : ''}</div>`;
+  }).join('') : '<p class="muted">אין מעקבים פתוחים.</p>';
+  $('#fu-list').querySelectorAll('.fu-item').forEach((el) => el.addEventListener('click', () => openLead(+el.dataset.id)));
+}
+
+function interactionModal(kind) {
+  const inbound = kind === 'EMAIL_IN';
+  modal(`<h3>${inbound ? 'תשובה שהתקבלה' : 'מייל שנשלח ידנית'}</h3>
+    <label>אימייל ${inbound ? 'השולח' : 'הנמען'}<input name="email" type="email" dir="ltr" required></label>
+    <label>שם איש קשר (אם הליד חדש)<input name="name"></label>
+    <label>חברה (אם הליד חדש)<input name="company"></label>
+    <label>תאריך<input name="at" type="date" value="${dayStr(new Date())}"></label>
+    <label>נושא<input name="subject"></label>
+    <label>תוכן<textarea name="body" rows="8" placeholder="הדבק כאן את המייל"></textarea></label>
+    <p class="muted">${inbound ? 'השלב יעבור ל"מעורב", רצפים יעצרו, ותיקבע תזכורת למענה ביומיים.' : 'השלב יעבור ל"נוצר קשר" ותיקבע תזכורת מעקב ל-5 ימים.'} ליד שלא קיים ייווצר.</p>`, async (fd) => {
+    if (fd.at) fd.at = `${fd.at}T12:00:00`;
+    const r = await api('/interactions', { method: 'POST', body: { ...fd, kind } });
+    toast(r.created ? 'ליד חדש נוצר ותועד' : 'תועד');
+    await loadMeta();
+    refreshView();
+    openLead(r.leadId);
+  }, 'תיעוד');
 }
 
 // ---------------- Sequences ----------------
@@ -344,9 +414,20 @@ $('#import-form').addEventListener('submit', async (e) => {
   } catch (err) { fail(err); }
 });
 
+$('#sent-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const r = await api('/import-sent', { method: 'POST', body: new FormData(e.target) });
+    $('#sent-result').innerHTML = `<p><b>${r.logged}</b> מיילים תועדו (<b>${r.created}</b> לידים חדשים) · <b>${r.skipped.length}</b> כבר מתועדים · <b>${r.invalid.length}</b> שורות לא תקינות</p>
+      ${r.invalid.length ? `<details><summary>שורות לא תקינות</summary>${r.invalid.map((d) => `שורה ${d.row}: ${esc(d.reason)}`).join('<br>')}</details>` : ''}`;
+    e.target.reset();
+    loadMeta();
+  } catch (err) { fail(err); }
+});
+
 // ---------------- Wiring ----------------
 let view = 'board';
-const views = { board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
+const views = { followups: renderFollowups, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
 function refreshView() { views[view]().catch(fail); }
 function show(v) {
   view = v;
@@ -356,7 +437,11 @@ function show(v) {
   refreshView();
 }
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.view) show(e.target.dataset.view); });
-document.addEventListener('click', (e) => { if (e.target.closest('[data-action="new-lead"]')) newLead(); });
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-action="new-lead"]')) newLead();
+  if (e.target.closest('[data-action="paste-reply"]')) interactionModal('EMAIL_IN');
+  if (e.target.closest('[data-action="log-sent"]')) interactionModal('EMAIL_OUT');
+});
 $('#scrim').onclick = closeDrawer;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 $('#logout').onclick = async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login'; };
@@ -364,7 +449,7 @@ $('#new-seq').onclick = () => editSequence(null);
 $('#stats-days').onchange = renderStats;
 let deb;
 ['#board-q', '#f-q'].forEach((s) => $(s).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refreshView, 250); }));
-['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale'].forEach((s) => $(s).addEventListener('change', renderLeads));
+['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country'].forEach((s) => $(s).addEventListener('change', renderLeads));
 $('#sel-all').onchange = (e) => document.querySelectorAll('.sel').forEach((c) => { c.checked = e.target.checked; });
 $('#bulk-enroll').onclick = async () => {
   const seqId = $('#bulk-seq').value;
@@ -382,8 +467,9 @@ $('#bulk-enroll').onclick = async () => {
   if (!r.ok) { location.href = '/login'; return; }
   ({ csrf } = await r.json());
   await loadMeta();
-  let saved = 'board';
+  renderFollowups().catch(() => {});
+  let saved = 'followups';
   try { saved = localStorage.getItem('crm.view') || 'board'; } catch { /* ignore */ }
-  show(views[saved] ? saved : 'board');
+  show(views[saved] ? saved : 'followups');
   setInterval(() => { if (!document.hidden && !$('#modal').open && $('#drawer').classList.contains('hidden')) refreshView(); }, 60000);
 }());
