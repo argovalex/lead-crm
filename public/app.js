@@ -521,6 +521,68 @@ async function renderStats() {
     </div>`;
 }
 
+// ---------------- Dashboard ----------------
+async function renderDashboard() {
+  const days = +$('#dash-days').value;
+  const [s, all, fu] = await Promise.all([api(`/stats?days=${days}`), api('/leads'), api('/followups')]);
+  const since = Date.now() - days * 86400000;
+  const fresh = all.filter((l) => new Date(l.createdAt) >= since);
+  const prev = all.filter((l) => { const t = new Date(l.createdAt); return t >= since - days * 86400000 && t < since; }).length;
+  const delta = prev ? Math.round(((fresh.length - prev) / prev) * 100) : null;
+  const k = (v, l, sub = '', cls = '') => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div>${sub ? `<div class="sub ${cls}">${sub}</div>` : ''}</div>`;
+  const overdue = fu.filter((l) => new Date(l.nextFollowUpAt) <= new Date());
+
+  // Leads created per day
+  const byDay = new Map();
+  for (let i = days - 1; i >= 0; i--) byDay.set(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10), 0);
+  fresh.forEach((l) => { const d = dayStr(l.createdAt); if (byDay.has(d)) byDay.set(d, byDay.get(d) + 1); });
+  const pts = [...byDay.entries()];
+  const W = 640, H = 200, pl = 28, pr = 8, pt = 10, pb = 22;
+  const max = Math.max(5, Math.ceil(Math.max(...pts.map((p) => p[1])) / 5) * 5);
+  const x = (i) => W - pr - (pts.length - 1 - i) * ((W - pl - pr) / Math.max(1, pts.length - 1));
+  const y = (v) => pt + (1 - v / max) * (H - pt - pb);
+  const grid = [0, 1, 2, 3, 4].map((t) => { const v = (max / 4) * t; return `<line x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e9e4"/><text x="${pl - 5}" y="${y(v) + 4}" text-anchor="end" class="ax">${Math.round(v)}</text>`; }).join('');
+  const line = pts.map((p, i) => `${x(i)},${y(p[1])}`).join(' ');
+  const step = Math.max(1, Math.round(pts.length / 6));
+  const labels = pts.map((p, i) => ((pts.length - 1 - i) % step === 0 ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" class="ax">${+p[0].slice(8)}/${+p[0].slice(5, 7)}</text>` : '')).join('');
+  const lx = x(pts.length - 1), ly = y(pts[pts.length - 1][1]);
+  const trend = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="לידים חדשים לפי יום">${grid}
+    <polygon points="${x(0)},${H - pb} ${line} ${lx},${H - pb}" fill="var(--accent)" opacity=".12"/>
+    <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2"/><circle cx="${lx}" cy="${ly}" r="4" fill="var(--accent)"/>${labels}</svg>`;
+
+  // Sources
+  const src = {};
+  all.forEach((l) => { const key = l.source || 'ללא מקור'; src[key] = (src[key] || 0) + 1; });
+  const srcRows = Object.entries(src).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const smax = srcRows.length ? srcRows[0][1] : 1;
+  const sources = srcRows.map(([n, c]) => `<div class="dsrc"><span>${esc(n)}</span><div class="track"><div class="fill" style="width:${(c / smax) * 100}%"></div></div><span class="num">${c}</span></div>`).join('') || '<p class="muted">אין נתונים</p>';
+
+  const rows = overdue.slice(0, 8).map((l) => `<tr data-id="${l.id}"><td>${esc(l.name)}${l.company ? `<div class="muted">${esc(l.company)}</div>` : ''}</td>
+    <td><span class="stagepill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span></td><td>${esc(l.owner || '')}</td>
+    <td class="over">${Math.max(1, Math.floor((Date.now() - new Date(l.nextFollowUpAt)) / 86400000))} ימים</td></tr>`).join('');
+
+  $('#dash').innerHTML = `
+    <div class="kpis">
+      ${k(all.length, 'לידים בסך הכל')}
+      ${k(fresh.length, `חדשים ב-${days} ימים`, delta === null ? '' : `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% מהתקופה הקודמת`, delta >= 0 ? 'good' : 'bad')}
+      ${k(s.sent, 'מיילים נשלחו', `פתיחה ${s.openRate}% · הקלקה ${s.clickRate}%`)}
+      ${k(`${s.replyRate}%`, 'אחוז תשובה')}
+      ${k(overdue.length, 'פולואפ באיחור', '', overdue.length ? 'bad' : 'good')}
+      ${k(`${s.winRate}%`, 'אחוז סגירה', `${s.stages.WON} נסגרו · ${s.stages.LOST} אבודים`)}
+    </div>
+    <div class="dgrid">
+      <div class="dcard"><h3>לידים חדשים לפי יום</h3>${trend}</div>
+      <div class="dcard"><h3>משפך לפי שלב</h3>
+        ${s.funnel.map((f) => `<div class="fbar" style="--c:var(--s-${f.stage})"><span>${STAGE_LABELS[f.stage]}</span><div class="track"><div class="fill" style="width:${f.conversion}%"></div></div><span class="num">${f.reached} · ${f.conversion}%</span></div>`).join('')}
+      </div>
+      <div class="dcard"><h3>מקור הליד</h3>${sources}</div>
+      <div class="dcard"><h3>פולואפ שעבר את התאריך</h3>
+        ${rows ? `<table class="dtable"><thead><tr><th>ליד</th><th>שלב</th><th>אחראי</th><th>באיחור</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">אין פולואפ באיחור</p>'}
+      </div>
+    </div>`;
+  document.querySelectorAll('#dash .dtable tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openLead(+tr.dataset.id)));
+}
+
 // ---------------- Import ----------------
 $('#import-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -614,7 +676,7 @@ $('#set-prev').onclick = async () => {
 
 // ---------------- Wiring ----------------
 let view = 'board';
-const views = { followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
+const views = { dashboard: renderDashboard, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
 function refreshView() { views[view]().catch(fail); }
 function show(v) {
   view = v;
@@ -635,6 +697,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawe
 $('#logout').onclick = async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login'; };
 $('#new-seq').onclick = () => editSequence(null);
 $('#stats-days').onchange = renderStats;
+$('#dash-days').onchange = renderDashboard;
 let deb;
 ['#board-q', '#f-q'].forEach((s) => $(s).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refreshView, 250); }));
 ['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country'].forEach((s) => $(s).addEventListener('change', renderLeads));
