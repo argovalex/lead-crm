@@ -24,6 +24,7 @@ enum EnrollmentStatus {
 }
 
 enum MessageStatus {
+  DRAFT
   QUEUED
   SENDING
   SENT
@@ -143,4 +144,9 @@ model WebhookEvent {
   id         String   @id
   type       String
   receivedAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
 }

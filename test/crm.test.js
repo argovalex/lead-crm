@@ -285,3 +285,24 @@ test('inbound webhook from unknown sender creates a lead, logs subject, ENGAGED;
   assert.equal((await post('in_2', { from: 'alex@alargov.com', subject: 'x' })).status, 200);
   assert.equal(await prisma.lead.findUnique({ where: { email: 'alex@alargov.com' } }), null);
 });
+
+test('approval mode: sequence step is a DRAFT until approved; rendered email has signature, link and video thumbnail', async () => {
+  await prisma.setting.update({ where: { key: 'requireApproval' }, data: { value: 'true' } });
+  const lead = await leads.createLead({ name: 'Dana Levi', email: 'dana@example.com' });
+  const seq = await prisma.sequence.create({ data: { name: 'S', steps: { create: [{ index: 0, delayDays: 0, subject: 'Hi', body: 'Watch [video:https://youtu.be/S8zjWCywGj4] or https://www.alargov.com' }] } } });
+  await email.enroll(lead.id, seq.id, T0);
+  await scheduler.tick(at(0, 1));
+  assert.equal(mock.sent.length, 0);
+  const msg = await prisma.emailMessage.findFirst();
+  assert.equal(msg.status, 'DRAFT');
+
+  await prisma.emailMessage.update({ where: { id: msg.id }, data: { status: 'QUEUED', body: 'Edited https://www.alargov.com' } });
+  await scheduler.tick(at(0, 2));
+  assert.equal(mock.sent.length, 1);
+  assert.match(mock.sent[0].html, /alargov\.com\/assets\/alex\.jpg/);   // default signature with photo
+  assert.match(mock.sent[0].html, /<a href="https:\/\/www\.alargov\.com"/);
+  assert.match(mock.sent[0].text, /Edited https:\/\/www\.alargov\.com/);
+
+  const built = email.buildEmail(lead, 'x', '[video:https://youtu.be/S8zjWCywGj4]', { signatureHtml: '' });
+  assert.match(built.html, /img\.youtube\.com\/vi\/S8zjWCywGj4\/hqdefault\.jpg/);
+});

@@ -65,7 +65,7 @@ async function stopEnrollments(leadId, reason, db = prisma) {
   const active = await db.enrollment.findMany({ where: { leadId, status: 'ACTIVE' } });
   if (!active.length) return 0;
   await db.enrollment.updateMany({ where: { leadId, status: 'ACTIVE' }, data: { status: 'STOPPED', stopReason: reason, nextRunAt: null } });
-  await db.emailMessage.updateMany({ where: { leadId, status: 'QUEUED' }, data: { status: 'CANCELLED', lastError: reason } });
+  await db.emailMessage.updateMany({ where: { leadId, status: { in: ['QUEUED', 'DRAFT'] } }, data: { status: 'CANCELLED', lastError: reason } });
   return active.length;
 }
 

@@ -2,12 +2,12 @@ const prisma = require('../db');
 const config = require('../config');
 const { getProvider } = require('./provider');
 const leads = require('./leads');
+const settings = require('./settings');
+const { esc, renderRich, renderPlain, htmlToText } = require('./render');
 
 const DAY = 24 * 60 * 60 * 1000;
 const STUCK_MS = 10 * 60 * 1000; // a SENDING message older than this is retried with the same idempotency key
 const MAX_ATTEMPTS = 5;
-
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function renderVars(tpl, lead) {
   const firstName = (lead.name || '').split(/\s+/)[0] || '';
@@ -19,16 +19,18 @@ function unsubUrl(lead) {
   return `${config.appUrl}/u/${lead.unsubToken}`;
 }
 
-function buildEmail(lead, subject, body) {
+function buildEmail(lead, subject, body, opts = {}) {
   const url = unsubUrl(lead);
   const s = renderVars(subject, lead);
   const b = renderVars(body, lead);
-  const rtl = /[֐-׿]/.test(b);
+  const rtl = /[\u0590-\u05FF]/.test(b);
+  const sig = opts.signatureHtml || '';
   const html = `<div dir="${rtl ? 'rtl' : 'ltr'}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6">`
-    + esc(b).replace(/\n/g, '<br>')
+    + renderRich(b)
+    + (sig ? `<div style="margin-top:20px">${sig}</div>` : '')
     + `<hr style="border:none;border-top:1px solid #ddd;margin:24px 0 8px"><p style="font-size:12px;color:#888">`
     + `<a href="${url}" style="color:#888">${rtl ? 'הסרה מרשימת התפוצה' : 'Unsubscribe'}</a></p></div>`;
-  const text = `${b}\n\n--\n${rtl ? 'להסרה' : 'Unsubscribe'}: ${url}`;
+  const text = `${renderPlain(b)}${sig ? `\n\n${htmlToText(sig)}` : ''}\n\n--\n${rtl ? 'להסרה' : 'Unsubscribe'}: ${url}`;
   const headers = { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' };
   return { subject: s, html, text, headers };
 }
@@ -73,6 +75,7 @@ async function materializeDueSteps(now = new Date(), db = prisma) {
     take: 500,
   });
   let created = 0;
+  const initialStatus = (await settings.getAll(db)).requireApproval ? 'DRAFT' : 'QUEUED';
   for (const enr of due) {
     const { lead } = enr;
     const steps = enr.sequence.steps;
@@ -98,7 +101,7 @@ async function materializeDueSteps(now = new Date(), db = prisma) {
         await tx.emailMessage.create({
           data: {
             leadId: lead.id, enrollmentId: enr.id, stepIndex: step.index,
-            subject: step.subject, body: step.body, idempotencyKey: `enr:${enr.id}:step:${step.index}`,
+            subject: step.subject, body: step.body, status: initialStatus, idempotencyKey: `enr:${enr.id}:step:${step.index}`,
           },
         });
         created += 1;
@@ -136,6 +139,7 @@ async function dispatch(now = new Date(), db = prisma, provider = getProvider())
 
   let sent = 0;
   let failed = 0;
+  const cfg = claimed.length ? await settings.getAll(db) : null;
   for (const { id } of claimed) {
     const msg = await db.emailMessage.findUnique({ where: { id }, include: { lead: true } });
     const { lead } = msg;
@@ -143,7 +147,7 @@ async function dispatch(now = new Date(), db = prisma, provider = getProvider())
       await db.emailMessage.update({ where: { id }, data: { status: 'CANCELLED', lastError: 'lead_not_emailable' } });
       continue;
     }
-    const built = buildEmail(lead, msg.subject, msg.body);
+    const built = buildEmail(lead, msg.subject, msg.body, cfg);
     try {
       const { providerId } = await provider.send({ to: lead.email, ...built, idempotencyKey: msg.idempotencyKey });
       await db.emailMessage.update({ where: { id }, data: { status: 'SENT', sentAt: now, providerId, lockedAt: null, subject: built.subject } });

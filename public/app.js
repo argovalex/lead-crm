@@ -51,6 +51,7 @@ function toast(msg, err = false) {
   t._t = setTimeout(() => { t.className = 'toast'; }, 2600);
 }
 const ERR = {
+  message_not_editable: 'ההודעה כבר נשלחה או בוטלה', subject_and_body_required: 'נושא ותוכן חובה',
   duplicate_email: 'אימייל כבר קיים במערכת', invalid_email: 'אימייל לא תקין', lead_unsubscribed: 'הליד הסיר עצמו מהתפוצה',
   lead_bounced: 'כתובת המייל חוזרת (bounce)', lead_not_emailable: 'לא ניתן לשלוח לליד הזה', already_enrolled: 'הליד כבר ברצף הזה',
   sequence_has_active_enrollments: 'יש לידים פעילים ברצף — לא ניתן לערוך צעדים', delays_must_be_ascending: 'ימי ההמתנה חייבים להיות בסדר עולה',
@@ -250,9 +251,11 @@ async function openLead(id) {
   };
   $('#d-email').onclick = () => modal(`
     <h3>מייל ל-${esc(l.name)}</h3>
+    <input type="hidden" name="leadId" value="${l.id}">
     <label>נושא<input name="subject" required></label>
-    <label>תוכן — אפשר להשתמש ב-{{name}}, {{first_name}}, {{company}}<textarea name="body" rows="8" required></textarea></label>
-    <p class="muted">המייל ייכנס לתור וישלח בדקה הקרובה. קישור הסרה מתווסף אוטומטית.</p>`, async (fd) => {
+    <label>תוכן — משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="8" required></textarea></label>
+    <p class="muted">קישור: הדבק כתובת, או [טקסט](https://...). סרטון YouTube: [video:https://youtu.be/XXXX] יוצג כתמונה שנפתחת בלחיצה. החתימה נוספת אוטומטית.</p>
+    <div class="logrow"><button type="button" class="btn" data-preview="">👁 תצוגה מקדימה</button><button type="button" class="btn" data-test="">✉ שלח לי בדיקה</button></div>`, async (fd) => {
     await api(`/leads/${id}/email`, { method: 'POST', body: fd });
     toast('המייל בתור לשליחה');
     refresh();
@@ -269,9 +272,30 @@ function modal(html, onSubmit, okText = 'שמירה') {
     e.preventDefault();
     try { await onSubmit(Object.fromEntries(new FormData(form)), form); dlg.close(); } catch (err) { fail(err); }
   };
+  form.onclick = async (e) => {
+    const pv = e.target.closest('[data-preview]');
+    const ts = e.target.closest('[data-test]');
+    if (!pv && !ts) return;
+    e.preventDefault();
+    const i = (pv || ts).dataset.preview ?? (pv || ts).dataset.test;
+    const f = new FormData(form);
+    const payload = { subject: f.get(i === '' ? 'subject' : `s${i}`), body: f.get(i === '' ? 'body' : `b${i}`), leadId: f.get('leadId') || undefined };
+    try {
+      if (pv) await showPreview(payload);
+      else { const r = await api('/test-email', { method: 'POST', body: payload }); toast(`נשלח לבדיקה אל ${r.sentTo}`); }
+    } catch (err) { fail(err); }
+  };
   dlg.showModal();
   return form;
 }
+
+async function showPreview(payload) {
+  const r = await api('/preview', { method: 'POST', body: payload });
+  $('#pv-meta').innerHTML = `נושא: <b>${esc(r.subject)}</b>${r.sampleLead ? ' · משתנים מולאו בליד לדוגמה (Fotini Kanat, MG Yachts)' : ''}`;
+  $('#pv-frame').srcdoc = r.html;
+  $('#preview-dlg').showModal();
+}
+$('#pv-close').onclick = () => $('#preview-dlg').close();
 
 function newLead() {
   modal(`<h3>ליד חדש</h3>
@@ -353,13 +377,14 @@ function editSequence(seq) {
   const steps = seq ? seq.steps : [{ delayDays: 0, subject: '', body: '' }, { delayDays: 3, subject: '', body: '' }, { delayDays: 7, subject: '', body: '' }];
   const stepHtml = (s, i) => `<div class="step">
     <div class="hdr"><b>צעד ${i + 1}</b> · יום <input type="number" min="0" name="d${i}" value="${s.delayDays}" required>
-    <button type="button" class="btn ghost sm" data-rm="${i}">הסר</button></div>
+    <button type="button" class="btn ghost sm" data-preview="${i}">👁 תצוגה</button><button type="button" class="btn ghost sm" data-test="${i}">✉ בדיקה אליי</button><button type="button" class="btn ghost sm" data-rm="${i}">הסר</button></div>
     <input name="s${i}" placeholder="נושא — למשל: היי {{first_name}}" value="${esc(s.subject)}" required>
     <textarea name="b${i}" rows="4" placeholder="תוכן המייל" required>${esc(s.body)}</textarea></div>`;
   const form = modal(`<h3>${seq ? 'עריכת רצף' : 'רצף חדש'}</h3>
     <label>שם הרצף<input name="name" value="${esc(seq?.name)}" required></label>
     <div id="steps" style="display:flex;flex-direction:column;gap:10px">${steps.map(stepHtml).join('')}</div>
     <button type="button" class="btn" id="add-step">+ צעד</button>
+    <p class="muted">קישור: הדבק כתובת או [טקסט](https://...). סרטון YouTube: [video:https://youtu.be/XXXX]. החתימה נוספת אוטומטית.</p>
     <p class="muted">היום נספר מרגע ההוספה לרצף. הרצף נעצר אוטומטית כשהליד משיב, חוזר (bounce) או מסיר עצמו.</p>`, async (fd) => {
     const n = form.querySelectorAll('.step').length;
     const body = { name: fd.name, steps: [] };
@@ -425,9 +450,76 @@ $('#sent-form').addEventListener('submit', async (e) => {
   } catch (err) { fail(err); }
 });
 
+// ---------------- Outbox ----------------
+async function renderOutbox() {
+  const rows = await api('/outbox');
+  const drafts = rows.filter((m) => m.status === 'DRAFT').length;
+  const b = $('#ob-count');
+  b.textContent = drafts;
+  b.classList.toggle('hidden', !drafts);
+  $('#ob-list').innerHTML = rows.length ? rows.map((m) => `
+    <div class="seq" data-id="${m.id}">
+      <div><b>${esc(m.lead.name)}</b> <span class="muted">${esc(m.lead.email)}${m.lead.company ? ` · ${esc(m.lead.company)}` : ''}</span>
+        <span class="flag ${m.status === 'DRAFT' ? 'warn' : 'good'}">${m.status === 'DRAFT' ? 'ממתין לאישור' : 'בתור, נשלח בדקה הקרובה'}</span>
+        ${m.stepIndex != null ? `<span class="muted">צעד ${m.stepIndex + 1} ברצף</span>` : '<span class="muted">מייל בודד</span>'}</div>
+      <label>נושא<input data-f="subject" value="${esc(m.subject)}"></label>
+      <label>תוכן<textarea data-f="body" rows="8">${esc(m.body)}</textarea></label>
+      <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm" data-act="save">שמור עריכה</button>
+        <button class="btn sm" data-act="preview">👁 תצוגה</button>
+        <button class="btn sm" data-act="test">✉ בדיקה אליי</button>
+        ${m.status === 'DRAFT' ? '<button class="btn sm primary" data-act="approve">אשר ושלח</button>' : ''}
+        <button class="btn sm danger" data-act="cancel">בטל</button>
+      </div>
+    </div>`).join('') : '<p class="muted">אין מיילים בהמתנה.</p>';
+}
+$('#ob-list').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const card = btn.closest('[data-id]');
+  const mid = card.dataset.id;
+  const subject = card.querySelector('[data-f=subject]').value;
+  const body = card.querySelector('[data-f=body]').value;
+  try {
+    if (btn.dataset.act === 'preview') return await showPreview({ subject, body });
+    if (btn.dataset.act === 'test') { const r = await api('/test-email', { method: 'POST', body: { subject, body } }); return toast(`נשלח לבדיקה אל ${r.sentTo}`); }
+    if (btn.dataset.act === 'cancel') { if (!confirm('לבטל את ההודעה?')) return; await api(`/messages/${mid}/cancel`, { method: 'POST' }); }
+    if (btn.dataset.act === 'save') { await api(`/messages/${mid}`, { method: 'PATCH', body: { subject, body } }); toast('נשמר'); }
+    if (btn.dataset.act === 'approve') { await api(`/messages/${mid}`, { method: 'PATCH', body: { subject, body } }); await api(`/messages/${mid}/approve`, { method: 'POST' }); toast('אושר, נשלח בדקה הקרובה'); }
+    renderOutbox();
+  } catch (err) { fail(err); }
+});
+$('#ob-approve-all').onclick = async () => {
+  if (!confirm('לאשר ולשלח את כל ההודעות הממתינות, בלי לערוך?')) return;
+  try { const r = await api('/outbox/approve-all', { method: 'POST' }); toast(`${r.approved} אושרו`); renderOutbox(); } catch (err) { fail(err); }
+};
+
+// ---------------- Settings ----------------
+async function renderSettings() {
+  const s = await api('/settings');
+  $('#set-sig').value = s.signatureHtml;
+  $('#set-approval').checked = s.requireApproval;
+}
+$('#set-save').onclick = async () => {
+  try {
+    await api('/settings', { method: 'PUT', body: { signatureHtml: $('#set-sig').value, requireApproval: $('#set-approval').checked } });
+    toast('נשמר');
+  } catch (err) { fail(err); }
+};
+$('#set-prev').onclick = async () => {
+  try {
+    // preview uses the saved signature; save first so the preview reflects edits
+    await api('/settings', { method: 'PUT', body: { signatureHtml: $('#set-sig').value, requireApproval: $('#set-approval').checked } });
+    const r2 = await api('/preview', { method: 'POST', body: { subject: 'דוגמה', body: 'Hi {{first_name}},\nזה מייל לדוגמה.\n[video:https://youtu.be/S8zjWCywGj4]' } });
+    $('#pv-meta').innerHTML = `נושא: <b>${esc(r2.subject)}</b> · החתימה נשמרה`;
+    $('#pv-frame').srcdoc = r2.html;
+    $('#preview-dlg').showModal();
+  } catch (err) { fail(err); }
+};
+
 // ---------------- Wiring ----------------
 let view = 'board';
-const views = { followups: renderFollowups, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
+const views = { followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
 function refreshView() { views[view]().catch(fail); }
 function show(v) {
   view = v;
@@ -468,6 +560,7 @@ $('#bulk-enroll').onclick = async () => {
   ({ csrf } = await r.json());
   await loadMeta();
   renderFollowups().catch(() => {});
+  api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   let saved = 'followups';
   try { saved = localStorage.getItem('crm.view') || 'board'; } catch { /* ignore */ }
   show(views[saved] ? saved : 'followups');

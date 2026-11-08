@@ -12,7 +12,8 @@ const prisma = require('../src/db');
 const provider = require('../src/services/provider');
 
 async function reset() {
-  await prisma.$executeRawUnsafe('TRUNCATE "Activity","EmailMessage","Enrollment","SequenceStep","Sequence","Lead","WebhookEvent" RESTART IDENTITY CASCADE');
+  await prisma.$executeRawUnsafe('TRUNCATE "Activity","EmailMessage","Enrollment","SequenceStep","Sequence","Lead","WebhookEvent","Setting" RESTART IDENTITY CASCADE');
+  await prisma.setting.create({ data: { key: 'requireApproval', value: 'false' } }); // existing tests exercise immediate sending
   const mock = provider.mockProvider();
   provider.setProvider(mock);
   return mock;

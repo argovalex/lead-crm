@@ -13,10 +13,12 @@
   <nav id="tabs">
     <button data-view="followups">מעקבים <span id="fu-count" class="badge hidden"></span></button>
     <button data-view="board" class="active">לוח</button>
+    <button data-view="outbox">תור שליחה <span id="ob-count" class="badge hidden"></span></button>
     <button data-view="leads">לידים</button>
     <button data-view="sequences">רצפי מיילים</button>
     <button data-view="stats">סטטיסטיקה</button>
     <button data-view="import">ייבוא</button>
+    <button data-view="settings">הגדרות</button>
   </nav>
   <button class="btn ghost" id="logout">יציאה</button>
 </header>
@@ -29,6 +31,28 @@
       <span class="muted">מעקבים שהגיע זמנם, ותשובות שמחכות למענה.</span>
     </div>
     <div id="fu-list" class="cards"></div>
+  </section>
+
+  <section id="view-outbox" class="view hidden">
+    <div class="toolbar">
+      <button class="btn primary" id="ob-approve-all">אשר הכל ושלח</button>
+      <span class="muted">מיילים מרצפים ממתינים כאן לאישור. אפשר לערוך, לראות תצוגה מקדימה, לאשר או לבטל. מיילים שאושרו נשלחים בדקה הקרובה.</span>
+    </div>
+    <div id="ob-list" class="cards"></div>
+  </section>
+
+  <section id="view-settings" class="view hidden">
+    <div class="panel">
+      <h2>שליחה</h2>
+      <label class="chk"><input type="checkbox" id="set-approval"> מיילים מרצפים דורשים אישור שלי לפני שליחה (מומלץ)</label>
+      <h2 style="margin-top:20px">חתימה בכל מייל יוצא</h2>
+      <p class="muted">HTML. התמונה נטענת מכתובת ציבורית. לדוגמה https://www.alargov.com/assets/alex.jpg. החתימה מופיעה אחרי תוכן המייל ולפני קישור ההסרה.</p>
+      <textarea id="set-sig" rows="10" dir="ltr" style="width:100%;font-family:monospace;font-size:12px"></textarea>
+      <div class="actions" style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn" id="set-prev">👁 תצוגה מקדימה</button>
+        <button class="btn primary" id="set-save">שמירה</button>
+      </div>
+    </div>
   </section>
 
   <section id="view-board" class="view hidden">
@@ -110,6 +134,7 @@
 </aside>
 <div id="scrim" class="scrim hidden"></div>
 
+<dialog id="preview-dlg" class="wide"><div style="padding:20px"><h3 style="margin:0 0 6px">תצוגה מקדימה</h3><div id="pv-meta" class="muted"></div><iframe id="pv-frame" style="width:100%;height:60vh;border:1px solid #dde3e0;border-radius:8px;background:#fff;margin-top:8px"></iframe><div style="text-align:end;margin-top:10px"><button class="btn primary" id="pv-close">סגירה</button></div></div></dialog>
 <dialog id="modal"><form method="dialog" id="modal-form"></form></dialog>
 <div id="toast" class="toast"></div>
 

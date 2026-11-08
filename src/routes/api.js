@@ -4,6 +4,9 @@ const { parse } = require('csv-parse/sync');
 const prisma = require('../db');
 const leads = require('../services/leads');
 const email = require('../services/email');
+const settings = require('../services/settings');
+const config = require('../config');
+const { getProvider } = require('../services/provider');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -227,6 +230,73 @@ router.post('/import-sent', upload.single('file'), wrap(async (req, res) => {
     }
   }
   res.json(result);
+}));
+
+// ---------- Settings (signature, approval mode) ----------
+router.get('/settings', wrap(async (_req, res) => { res.json(await settings.getAll()); }));
+
+router.put('/settings', wrap(async (req, res) => {
+  if ('signatureHtml' in req.body) await settings.set('signatureHtml', req.body.signatureHtml || '');
+  if ('requireApproval' in req.body) await settings.set('requireApproval', req.body.requireApproval ? 'true' : 'false');
+  res.json(await settings.getAll());
+}));
+
+// ---------- Preview / test send ----------
+const SAMPLE_LEAD = { name: 'Fotini Kanat', email: 'sample@example.com', company: 'MG Yachts', unsubToken: 'preview' };
+
+router.post('/preview', wrap(async (req, res) => {
+  const { subject, body, leadId } = req.body || {};
+  const lead = leadId ? await prisma.lead.findUnique({ where: { id: id(leadId) } }) : null;
+  const built = email.buildEmail(lead || SAMPLE_LEAD, subject || '', body || '', await settings.getAll());
+  res.json({ subject: built.subject, html: built.html, text: built.text, sampleLead: !lead });
+}));
+
+// Sends the rendered email to the admin's own address so it can be checked in a real inbox.
+router.post('/test-email', wrap(async (req, res) => {
+  const { subject, body, leadId } = req.body || {};
+  if (!subject || !body) return res.status(400).json({ error: 'subject_and_body_required' });
+  const lead = leadId ? await prisma.lead.findUnique({ where: { id: id(leadId) } }) : null;
+  const built = email.buildEmail(lead || SAMPLE_LEAD, subject, body, await settings.getAll());
+  const to = config.adminEmail;
+  const { providerId } = await getProvider().send({ to, ...built, subject: `[בדיקה] ${built.subject}`, idempotencyKey: `test:${Date.now()}:${Math.random().toString(36).slice(2, 8)}` });
+  res.json({ sentTo: to, providerId });
+}));
+
+// ---------- Outbox: review, edit, approve or cancel messages before they go out ----------
+router.get('/outbox', wrap(async (_req, res) => {
+  const rows = await prisma.emailMessage.findMany({
+    where: { status: { in: ['DRAFT', 'QUEUED'] } },
+    orderBy: { createdAt: 'asc' }, take: 300,
+    select: { id: true, subject: true, body: true, status: true, createdAt: true, stepIndex: true, enrollmentId: true, lead: { select: { id: true, name: true, email: true, company: true } } },
+  });
+  res.json(rows);
+}));
+
+router.patch('/messages/:id', wrap(async (req, res) => {
+  const data = {};
+  if (typeof req.body.subject === 'string' && req.body.subject.trim()) data.subject = req.body.subject;
+  if (typeof req.body.body === 'string' && req.body.body.trim()) data.body = req.body.body;
+  if (!Object.keys(data).length) return res.status(400).json({ error: 'subject_and_body_required' });
+  const r = await prisma.emailMessage.updateMany({ where: { id: id(req.params.id), status: { in: ['DRAFT', 'QUEUED'] } }, data });
+  if (!r.count) return res.status(409).json({ error: 'message_not_editable' });
+  res.json({ ok: true });
+}));
+
+router.post('/messages/:id/approve', wrap(async (req, res) => {
+  const r = await prisma.emailMessage.updateMany({ where: { id: id(req.params.id), status: 'DRAFT' }, data: { status: 'QUEUED' } });
+  if (!r.count) return res.status(409).json({ error: 'message_not_editable' });
+  res.json({ ok: true });
+}));
+
+router.post('/messages/:id/cancel', wrap(async (req, res) => {
+  const r = await prisma.emailMessage.updateMany({ where: { id: id(req.params.id), status: { in: ['DRAFT', 'QUEUED'] } }, data: { status: 'CANCELLED', lastError: 'cancelled_by_admin' } });
+  if (!r.count) return res.status(409).json({ error: 'message_not_editable' });
+  res.json({ ok: true });
+}));
+
+router.post('/outbox/approve-all', wrap(async (_req, res) => {
+  const r = await prisma.emailMessage.updateMany({ where: { status: 'DRAFT' }, data: { status: 'QUEUED' } });
+  res.json({ approved: r.count });
 }));
 
 // ---------- Sequences ----------
