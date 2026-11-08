@@ -73,42 +73,37 @@ async function renderBoard() {
   const q = $('#board-q').value.trim();
   const rows = await api(`/leads${q ? `?q=${encodeURIComponent(q)}` : ''}`);
   const board = $('#board');
+  const open = new Set([...board.querySelectorAll('details[open]')].map((d) => d.dataset.stage));
+  const first = !board.children.length;
   board.innerHTML = STAGES.map((s) => {
     const items = rows.filter((l) => l.stage === s);
-    return `<div class="col" data-stage="${s}" style="--c:var(--s-${s})">
-      <h3>${STAGE_LABELS[s]} <span class="count">${items.length}</span></h3>
-      <div class="cards-col">${items.map((l) => `
-        <div class="card" draggable="true" data-id="${l.id}">
-          <div class="n">${esc(l.name)}</div>
-          <div class="meta">${esc(l.company || l.email)}</div>
-          <div class="meta">${ago(l.lastActivityAt)}</div>
-          ${l.nextFollowUpAt ? `<div class="fu ${fuState(l)}">${esc(l.nextAction || 'מעקב')} · ${new Date(l.nextFollowUpAt).toLocaleDateString('he-IL')}</div>` : ''}
-          ${flagsHtml(l)}
-        </div>`).join('')}</div></div>`;
+    const isOpen = first ? !['WON', 'LOST'].includes(s) : open.has(s);
+    return `<details class="stage-group" data-stage="${s}" style="--c:var(--s-${s})" ${isOpen ? 'open' : ''}>
+      <summary><span class="dot"></span><b>${STAGE_LABELS[s]}</b> <span class="count">${items.length}</span></summary>
+      ${items.length ? `<div class="lrows">${items.map((l) => `
+        <div class="lrow" data-id="${l.id}">
+          <span class="c-name"><b>${esc(l.name)}</b></span>
+          <span class="c-co muted">${esc(l.company || l.email)}</span>
+          <span class="c-fu ${fuState(l) === 'over' ? 'over' : 'muted'}">${l.nextFollowUpAt ? `${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}` : ''}</span>
+          <span class="c-last muted" title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}</span>
+          <span class="c-flags">${flagsHtml(l)}</span>
+          <select class="c-stage" aria-label="שלב">${STAGES.map((st) => `<option value="${st}" ${st === l.stage ? 'selected' : ''}>${STAGE_LABELS[st]}</option>`).join('')}</select>
+        </div>`).join('')}</div>` : '<p class="muted empty">אין לידים בשלב</p>'}
+    </details>`;
   }).join('');
 
-  board.querySelectorAll('.card').forEach((c) => {
-    c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', c.dataset.id); c.classList.add('dragging'); });
-    c.addEventListener('dragend', () => c.classList.remove('dragging'));
-    c.addEventListener('click', () => openLead(+c.dataset.id));
-  });
-  board.querySelectorAll('.col').forEach((col) => {
-    col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('over'); });
-    col.addEventListener('dragleave', () => col.classList.remove('over'));
-    col.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      col.classList.remove('over');
-      const leadId = e.dataTransfer.getData('text/plain');
-      const card = board.querySelector(`.card[data-id="${leadId}"]`);
-      if (!card || card.closest('.col') === col) return;
-      col.querySelector('.cards-col').prepend(card); // optimistic
-      try {
-        await api(`/leads/${leadId}/stage`, { method: 'POST', body: { stage: col.dataset.stage } });
-        toast(`הועבר ל"${STAGE_LABELS[col.dataset.stage]}"`);
-      } catch (err) { fail(err); }
-      renderBoard();
-    });
-  });
+  board.querySelectorAll('.lrow').forEach((r) => r.addEventListener('click', (e) => {
+    if (e.target.closest('select')) return;
+    openLead(+r.dataset.id);
+  }));
+  board.querySelectorAll('.c-stage').forEach((sel) => sel.addEventListener('change', async () => {
+    const id = sel.closest('.lrow').dataset.id;
+    try {
+      await api(`/leads/${id}/stage`, { method: 'POST', body: { stage: sel.value } });
+      toast(`הועבר ל"${STAGE_LABELS[sel.value]}"`);
+    } catch (err) { fail(err); }
+    renderBoard();
+  }));
 }
 
 // ---------------- Leads table ----------------
@@ -353,20 +348,18 @@ function todayItem(l, group) {
   const last = (l.activities || [])[0];
   const d = (last && last.data) || {};
   const over = new Date(l.nextFollowUpAt) < new Date(new Date().setHours(0, 0, 0, 0));
+  const note = last ? `${(ACT[last.type] || [, last.type])[1]} · ${fmt(last.createdAt)}${d.subject ? ` · ${d.subject}` : ''}` : '';
   return `<div class="fu-item ${over ? 'over' : ''}" data-id="${l.id}" data-subject="${esc(d.subject || '')}">
-    <div class="who"><b>${esc(l.name)}</b><span class="muted">${esc(l.company || l.email)}${l.country ? ` · ${esc(l.country)}` : ''}</span>
-      <span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span>
-      ${l.priority ? `<span class="flag">${esc(l.priority)}</span>` : ''}</div>
-    <div><b>${esc(l.nextAction || 'מעקב')}</b> · ${dateHe(l.nextFollowUpAt)}${over ? ' <span class="flag bad">באיחור</span>' : ''}</div>
-    ${last ? `<div class="muted">${(ACT[last.type] || [, last.type])[1]} · ${fmt(last.createdAt)}${d.subject ? ` · <span dir="auto">${esc(d.subject)}</span>` : ''}</div>` : ''}
-    ${d.body ? `<div class="snip" dir="auto">${esc(d.body.slice(0, 280))}${d.body.length > 280 ? '…' : ''}</div>` : ''}
-    <div class="acts">
-      <button class="btn sm primary" data-a="reply">✉ ${group === 'reply' ? 'השב' : 'כתוב מייל'}</button>
-      <button class="btn sm" data-a="open">פתח כרטיס</button>
-      <button class="btn sm" data-a="done">✓ טופל</button>
-      <button class="btn sm" data-a="snooze3">דחה 3 ימים</button>
-      <button class="btn sm" data-a="snooze7">דחה שבוע</button>
-    </div></div>`;
+    <span class="c-name"><b>${esc(l.name)}</b><span class="muted">${esc(l.company || l.email)}${l.country ? ` · ${esc(l.country)}` : ''}</span></span>
+    <span class="c-stage"><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span>${l.priority ? ` <span class="flag">${esc(l.priority)}</span>` : ''}</span>
+    <span class="c-fu ${over ? 'over' : ''}">${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}${over ? ' <span class="flag bad">באיחור</span>' : ''}</span>
+    <span class="c-note muted" dir="auto" title="${esc(d.body ? d.body.slice(0, 400) : note)}">${esc(note)}</span>
+    <span class="acts">
+      <button class="btn sm primary" data-a="reply">${group === 'reply' ? 'השב' : 'מייל'}</button>
+      <button class="btn sm" data-a="done" title="טופל">✓</button>
+      <button class="btn sm" data-a="snooze3" title="דחה 3 ימים">+3</button>
+      <button class="btn sm" data-a="snooze7" title="דחה שבוע">+7</button>
+    </span></div>`;
 }
 
 async function renderFollowups() {

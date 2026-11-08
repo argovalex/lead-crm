@@ -196,7 +196,7 @@ async function handleEvent(eventId, event, db = prisma, now = new Date()) {
     const name = (raw.match(/^\s*"?([^"<]+?)"?\s*</) || [, ''])[1].trim() || undefined;
     if (!leads.isEmail(from)) return { handled: false };
     // Skip our own addresses and automatic mailer messages (bounces are handled by email.bounced).
-    if (/^(mailer-daemon|postmaster|noreply|no-reply)@/.test(from) || from.endsWith('@alargov.com') || from.endsWith('@reply.alargov.com')) return { handled: false, skipped: true };
+    if (/^(mailer-daemon|postmaster|noreply|no-reply)@/.test(from) || from.endsWith('@reply.alargov.com')) return { handled: false, skipped: true };
     const body = await fetchBody(d.email_id);
     const res = await leads.logInteractionByEmail({
       email: from, name, kind: 'EMAIL_IN', at: now, subject: d.subject || null,

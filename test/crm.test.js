@@ -282,8 +282,11 @@ test('inbound webhook from unknown sender creates a lead, logs subject, ENGAGED;
   const act = await prisma.activity.findFirst({ where: { leadId: lead.id, type: 'REPLY_IN' } });
   assert.equal(act.data.subject, 'Re: VHF refresher');
 
-  assert.equal((await post('in_2', { from: 'alex@alargov.com', subject: 'x' })).status, 200);
-  assert.equal(await prisma.lead.findUnique({ where: { email: 'alex@alargov.com' } }), null);
+  assert.equal((await post('in_2', { from: 'x@reply.alargov.com', subject: 'x' })).status, 200);
+  assert.equal(await prisma.lead.findUnique({ where: { email: 'x@reply.alargov.com' } }), null);
+  // Replies from our own domain are real replies (e.g. a test from alex@alargov.com) and are logged.
+  assert.equal((await post('in_3', { from: 'alex@alargov.com', subject: 'x' })).status, 200);
+  assert.ok(await prisma.lead.findUnique({ where: { email: 'alex@alargov.com' } }));
 });
 
 test('approval mode: sequence step is a DRAFT until approved; rendered email has signature, link and video thumbnail', async () => {

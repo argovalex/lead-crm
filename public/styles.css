@@ -144,3 +144,20 @@ details.dd>summary{cursor:pointer;font-weight:600}
 .fu-item .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .fu-item .who{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .fu-item .snip{unicode-bidi:plaintext;text-align:start}
+
+/* One row per lead (Today + Board) */
+.fu-item{display:grid;grid-template-columns:minmax(160px,2fr) 150px 150px minmax(120px,2fr) auto;gap:12px;align-items:center;padding:8px 12px;margin-bottom:4px;border-radius:8px}
+.fu-item .c-name{display:flex;flex-direction:column;min-width:0}.fu-item .c-name .muted,.fu-item .c-note{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.fu-item .c-fu.over{color:var(--danger)}.fu-item .acts{display:flex;gap:4px;margin:0}.fu-item:hover{background:#f6f8f5}
+.board{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:visible}
+.stage-group{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);border-right:4px solid var(--c)}
+.stage-group summary{cursor:pointer;padding:10px 14px;display:flex;gap:8px;align-items:center;list-style:none}
+.stage-group summary::-webkit-details-marker{display:none}
+.stage-group summary::before{content:"\25B8";color:var(--muted)}.stage-group[open] summary::before{content:"\25BE"}
+.stage-group .count{color:var(--muted);font-weight:400}.stage-group .empty{padding:0 14px 10px;margin:0}
+.lrows{border-top:1px solid var(--line)}
+.lrow{display:grid;grid-template-columns:minmax(150px,2fr) minmax(120px,2fr) 170px 110px minmax(80px,1fr) 110px;gap:10px;align-items:center;padding:6px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}
+.lrow:last-child{border-bottom:0}.lrow:hover{background:#f6f8f5}
+.lrow .c-name,.lrow .c-co,.lrow .c-fu{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lrow .c-fu.over{color:var(--danger)}
+.lrow .flags{margin:0}.lrow select{padding:3px 6px;font-size:12px}
+@media(max-width:900px){.fu-item,.lrow{grid-template-columns:1fr 1fr}.fu-item .c-note,.lrow .c-last,.lrow .c-flags{display:none}}
