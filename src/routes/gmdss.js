@@ -4,12 +4,14 @@ const config = require('../config');
 const settings = require('../services/settings');
 const { getProvider } = require('../services/provider');
 const { renderRich, renderPlain, htmlToText } = require('../services/render');
+const { suggestReply } = require('../services/suggest');
 const { VARIABLES, merge, parseCsv, importRows, logActivity } = require('../services/gmdss');
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const bad = (m, status = 400) => Object.assign(new Error(m), { status });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const FUP_DAYS = 7; // default follow-up after a send; editable per lead in the customer card
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const SAMPLE = {
@@ -76,6 +78,45 @@ router.put('/leads/:id', wrap(async (req, res) => {
     await logActivity(prisma, id, 'follow_up', data.followUpAt ? `Follow-up set for ${data.followUpAt.toISOString().slice(0, 10)}` : 'Follow-up cleared');
   }
   res.json(out);
+}));
+
+// Conversation history for a lead as {dir, subject, body, at} items, oldest first.
+async function threadFor(lead) {
+  const acts = await prisma.gmdssActivity.findMany({ where: { leadId: lead.id, type: { in: ['sent', 'replied', 'reply_sent'] } }, orderBy: { createdAt: 'asc' } });
+  const tpl = lead.templateId ? await prisma.gmdssTemplate.findUnique({ where: { id: lead.templateId } }) : null;
+  return acts.map((a) => {
+    const d = a.detail || '';
+    if (a.type === 'replied') { const [subject, ...rest] = d.split('\n'); return { dir: 'in', subject, body: rest.join('\n'), at: a.createdAt }; }
+    if (a.type === 'reply_sent') { const [subject, ...rest] = d.split('\n'); return { dir: 'out', subject, body: rest.join('\n'), at: a.createdAt }; }
+    return { dir: 'out', subject: d.replace(/\s+\[template:.*$/, ''), body: tpl ? merge(tpl.body, lead).text : '', at: a.createdAt };
+  });
+}
+
+// Draft a reply (or a follow-up when the lead has not answered) for the card's reply box.
+router.post('/leads/:id/suggest', wrap(async (req, res) => {
+  const lead = await prisma.gmdssLead.findUnique({ where: { id: Number(req.params.id) } });
+  if (!lead) throw bad('not_found', 404);
+  const items = await threadFor(lead);
+  if (!items.length) throw bad('no_conversation_yet');
+  res.json(await suggestReply({ name: lead.organization, company: lead.country }, items, { followUp: true }));
+}));
+
+// Send a one-to-one reply from the card and keep it in the timeline. Pushes the follow-up date out by the default.
+router.post('/leads/:id/reply', wrap(async (req, res) => {
+  const lead = await prisma.gmdssLead.findUnique({ where: { id: Number(req.params.id) } });
+  if (!lead) throw bad('not_found', 404);
+  if (!lead.email || !EMAIL_RE.test(lead.email)) throw bad('lead_has_no_email');
+  const subject = String((req.body && req.body.subject) || '').trim();
+  const text = String((req.body && req.body.body) || '').trim();
+  if (!subject || !text) throw bad('subject_and_body_required');
+  if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
+  const sig = (await settings.getAll()).signatureHtml || '';
+  const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(text)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}</div>`;
+  const plain = `${renderPlain(text)}${sig ? `\n\n${htmlToText(sig)}` : ''}`;
+  await getProvider().send({ to: lead.email, subject, html, text: plain, idempotencyKey: `gmdss-reply:${lead.id}:${Date.now()}` });
+  await logActivity(prisma, lead.id, 'reply_sent', `${subject}\n${text}`);
+  await prisma.gmdssLead.update({ where: { id: lead.id }, data: { followUpAt: new Date(Date.now() + FUP_DAYS * 86400000) } });
+  res.json({ sentTo: lead.email });
 }));
 
 // Customer card: activity timeline + manual notes.
@@ -172,7 +213,7 @@ router.post('/send', wrap(async (req, res) => {
         try {
           const b = await build(l, subject, body);
           const { providerId } = await getProvider().send({ to: l.email, subject: b.subject, html: b.html, text: b.text, idempotencyKey: `gmdss:${l.id}:${stamp}` });
-          await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null, providerId, deliveredAt: null, openedAt: null, clickedAt: null, bouncedAt: null, lastClickLink: null, openCount: 0, clickCount: 0 } });
+          await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null, providerId, deliveredAt: null, openedAt: null, clickedAt: null, bouncedAt: null, lastClickLink: null, openCount: 0, clickCount: 0, followUpAt: new Date(Date.now() + FUP_DAYS * 86400000) } });
           await logActivity(prisma, l.id, 'sent', `${b.subject}  [template: ${tpl.name}]`);
         } catch (e) {
           await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'failed', lastError: String(e.message).slice(0, 300) } });

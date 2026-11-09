@@ -322,13 +322,17 @@ $('#imp-file').onchange = async (e) => {
 const ACT = {
   sent: ['✉', 'Email sent'], delivered: ['✓', 'Delivered'], opened: ['👁', 'Opened'], clicked: ['↗', 'Clicked a link'],
   bounced: ['⚠', 'Bounced'], failed: ['⚠', 'Send failed'], replied: ['↩', 'Replied'], template: ['▤', 'Template'],
-  edited: ['✎', 'Lead edited'], email_changed: ['✎', 'Email changed'], follow_up: ['⏰', 'Follow-up'], note: ['📝', 'Note'],
+  edited: ['✎', 'Lead edited'], email_changed: ['✎', 'Email changed'], follow_up: ['⏰', 'Follow-up'], note: ['📝', 'Note'], reply_sent: ['↪', 'Reply sent'],
 };
 async function openCard(id) {
   const l = leads.find((x) => x.id === id);
   if (!l) return;
   let acts = [];
   try { acts = await api(`/leads/${id}/activities`); } catch (e) { toast(e.message, true); }
+  const lastIn = acts.find((a) => a.type === 'replied'), lastOut = acts.find((a) => a.type === 'sent');
+  const firstLine = (a) => String((a && a.detail) || '').split('\n')[0].replace(/\s+\[template:.*$/, '');
+  const base = firstLine(lastIn) || firstLine(lastOut);
+  const defSubject = base ? (/^re:/i.test(base) ? base : `Re: ${base}`) : '';
   const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
   const row = ([h, v]) => (v ? `<div style="display:flex;gap:8px"><span class="muted" style="min-width:110px">${h}</span><span dir="ltr">${esc(v)}</span></div>` : '');
   dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
@@ -344,7 +348,15 @@ async function openCard(id) {
       <button class="btn sm" id="cd-fu-save">Save date</button>
       <button class="btn sm" id="cd-fu-clear">Clear</button>
     </div>
-    <label>Add a note (call, meeting, reply, anything)
+    <h4 style="margin:12px 0 6px">Reply</h4>
+    <input id="cd-rsub" dir="ltr" style="width:100%;margin-bottom:6px" placeholder="Subject" value="${esc(defSubject)}">
+    <textarea id="cd-rbody" rows="7" dir="ltr" style="width:100%" placeholder="Write the reply here, or press Suggest to get a draft from Claude. Your signature is added automatically."></textarea>
+    <div class="toolbar wrap" style="margin:6px 0 4px">
+      <button class="btn sm" id="cd-suggest">✨ Suggest reply</button>
+      <button class="btn primary sm" id="cd-rsend" ${l.email ? '' : 'disabled'}>Send reply to ${esc(l.email || '')}</button>
+      <span class="muted" id="cd-rhint" style="font-size:12px"></span>
+    </div>
+    <label style="margin-top:12px">Add a note (call, meeting, reply, anything)
       <textarea id="cd-note" rows="2" dir="ltr" style="width:100%"></textarea></label>
     <div class="toolbar" style="margin:6px 0 12px"><button class="btn primary sm" id="cd-note-add">Add note</button></div>
     <h4 style="margin:0 0 6px">Activity</h4>
@@ -359,6 +371,21 @@ async function openCard(id) {
   const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('Saved'); openCard(id); } catch (e) { toast(e.message, true); } };
   $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);
   $('#cd-fu-clear').onclick = () => saveFu(null);
+  $('#cd-suggest').onclick = async () => {
+    const b = $('#cd-suggest'); b.disabled = true; $('#cd-rhint').textContent = 'Drafting...';
+    try {
+      const r = await api(`/leads/${id}/suggest`, { method: 'POST', body: {} });
+      $('#cd-rbody').value = r.text;
+      $('#cd-rhint').textContent = r.source === 'ai' ? 'Draft from Claude. Review and edit before sending.' : 'Basic template (AI key missing or unavailable). Edit before sending.';
+    } catch (e) { $('#cd-rhint').textContent = ''; toast(e.message, true); }
+    b.disabled = false;
+  };
+  $('#cd-rsend').onclick = async () => {
+    const subject = $('#cd-rsub').value.trim(), body = $('#cd-rbody').value.trim();
+    if (!subject || !body) { toast('Subject and reply text are required', true); return; }
+    if (!confirm(`Send this reply to ${l.email}?`)) return;
+    try { await api(`/leads/${id}/reply`, { method: 'POST', body: { subject, body } }); toast('Reply sent'); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+  };
   $('#cd-note-add').onclick = async () => {
     const detail = $('#cd-note').value.trim();
     if (!detail) return;
