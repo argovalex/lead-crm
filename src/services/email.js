@@ -199,7 +199,7 @@ async function handleEvent(eventId, event, db = prisma, now = new Date()) {
     const body = await fetchBody(d.email_id);
     const res = await leads.logInteractionByEmail({
       email: from, name, kind: 'EMAIL_IN', at: now, subject: d.subject || null,
-      body: body ? body.slice(0, 8000) : null, source: 'inbound reply',
+      body: body ? body.slice(0, 8000) : '(תוכן ההודעה לא נטען. למפתח ה-API של Resend צריכה להיות הרשאת Full access כדי לקרוא מיילים נכנסים. את ההודעה אפשר לראות ב-Resend תחת Emails, Receiving.)', source: 'inbound reply',
     }, db);
     return { handled: true, leadId: res.leadId, created: res.created };
   }
