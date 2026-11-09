@@ -13,6 +13,8 @@ async function logActivity(leadId, type, data = null, db = prisma, now = new Dat
   await db.lead.update({ where: { id: leadId }, data: { lastActivityAt: now, stale: false } });
 }
 
+const { classify } = require('./segments');
+
 async function createLead(input, db = prisma) {
   const email = normEmail(input.email);
   if (!isEmail(email)) throw Object.assign(new Error('invalid_email'), { status: 400 });
@@ -28,7 +30,7 @@ async function createLead(input, db = prisma) {
       notes: input.notes || null,
       owner: input.owner || null,
       country: input.country || null,
-      segment: input.segment || null,
+      segment: input.segment || classify(input.company) || null,
       priority: input.priority || null,
       website: input.website || null,
       unsubToken: newToken(),

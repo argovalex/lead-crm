@@ -829,6 +829,18 @@ $('#mail-shown').onclick = () => {
   document.querySelectorAll('#leads-body .sel').forEach((c) => { c.checked = true; });
   bulkMailModal(ids);
 };
+$('#auto-seg').onclick = async () => {
+  try {
+    const d = await api('/leads/auto-segment?dry=1', { method: 'POST', body: {} });
+    const lines = Object.entries(d.counts).map(([k, n]) => `${k}: ${n}`).join('\n');
+    if (!lines) return toast(`לא זוהה סוג באף אחד מ-${d.checked} הלידים ללא סוג`, true);
+    if (!confirm(`לקבוע סוג אוטומטית לפי שם החברה?\n${lines}\nללא זיהוי: ${d.unclassified}\n(ערכים קיימים לא יידרסו)`)) return;
+    await api('/leads/auto-segment', { method: 'POST', body: {} });
+    toast('הסוגים נקבעו');
+    await loadMeta();
+    renderLeads();
+  } catch (err) { fail(err); }
+};
 $('#bulk-del').onclick = () => {
   const ids = [...document.querySelectorAll('.sel:checked')].map((c) => +c.value);
   if (!ids.length) return toast('סמן לידים למחיקה', true);

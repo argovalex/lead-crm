@@ -8,6 +8,7 @@ const settings = require('../services/settings');
 const config = require('../config');
 const { getProvider } = require('../services/provider');
 const mailimport = require('../services/mailimport');
+const segments = require('../services/segments');
 const { suggestReply } = require('../services/suggest');
 
 const router = express.Router();
@@ -391,6 +392,23 @@ router.delete('/sequences/:id', wrap(async (req, res) => {
   if (active) return res.status(409).json({ error: 'sequence_has_active_enrollments' });
   await prisma.sequence.delete({ where: { id: seqId } });
   res.status(204).end();
+}));
+
+// Fills an empty "segment" from the company name. Never overwrites a value you set. ?dry=1 only counts.
+router.post('/leads/auto-segment', wrap(async (req, res) => {
+  const rows = await prisma.lead.findMany({ where: { OR: [{ segment: null }, { segment: '' }] }, select: { id: true, company: true } });
+  const by = {};
+  let none = 0;
+  for (const r of rows) {
+    const seg = segments.classify(r.company);
+    if (!seg) { none += 1; continue; }
+    (by[seg] = by[seg] || []).push(r.id);
+  }
+  const counts = Object.fromEntries(Object.entries(by).map(([k, v]) => [k, v.length]));
+  if (!req.query.dry) {
+    for (const [seg, ids] of Object.entries(by)) await prisma.lead.updateMany({ where: { id: { in: ids }, OR: [{ segment: null }, { segment: '' }] }, data: { segment: seg } });
+  }
+  res.json({ checked: rows.length, counts, unclassified: none, applied: !req.query.dry });
 }));
 
 // ---------- Mailbox: one conversation per lead (campaign, personal and received mail) ----------
