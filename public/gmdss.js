@@ -186,6 +186,17 @@ $('#reset').onclick = () => { ['#q', '#f-country', '#f-segment', '#f-fit', '#f-p
 $('#sel-all').onclick = () => { filtered().filter((l) => l.email).forEach((l) => selected.add(l.id)); render(); };
 $('#sel-none').onclick = () => { selected.clear(); render(); };
 $('#send').onclick = openDialog;
+$('#imp').onclick = () => $('#imp-file').click();
+$('#imp-file').onchange = async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const r = await api('/import', { method: 'POST', body: { csv: await f.text() } });
+    toast(`נקראו ${r.read}, נוספו ${r.inserted}, כפילויות ${r.duplicates}, בלי אימייל ${r.noEmail}, בלי טלפון ${r.noPhone}`);
+    await load();
+  } catch (err) { toast(err.message, true); }
+  e.target.value = '';
+};
 $('#tbl').addEventListener('click', (e) => {
   const th = e.target.closest('th[data-k]');
   if (th) { sortDir = sortKey === th.dataset.k ? -sortDir : 1; sortKey = th.dataset.k; render(); return; }

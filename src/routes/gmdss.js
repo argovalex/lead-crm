@@ -4,7 +4,7 @@ const config = require('../config');
 const settings = require('../services/settings');
 const { getProvider } = require('../services/provider');
 const { renderRich, renderPlain, htmlToText } = require('../services/render');
-const { VARIABLES, merge } = require('../services/gmdss');
+const { VARIABLES, merge, parseCsv, importRows } = require('../services/gmdss');
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -37,6 +37,15 @@ router.get('/variables', (_req, res) => res.json({ variables: VARIABLES, emailCo
 
 router.get('/leads', wrap(async (_req, res) => {
   res.json(await prisma.gmdssLead.findMany({ orderBy: { id: 'asc' } }));
+}));
+
+// Idempotent CSV import (same logic as scripts/import-gmdss.js). Body: { csv: "<file text>" }.
+router.post('/import', wrap(async (req, res) => {
+  const csv = req.body && req.body.csv;
+  if (typeof csv !== 'string' || !csv.trim()) throw bad('csv_required');
+  let rows;
+  try { rows = parseCsv(csv); } catch { throw bad('invalid_csv'); }
+  res.json(await importRows(prisma, rows));
 }));
 
 router.post('/preview', wrap(async (req, res) => {
