@@ -143,7 +143,7 @@ Best regards,
 Alex`;
 
 function openTemplates(selId) {
-  let cur = templates.find((t) => t.id === selId) || null;
+  let cur = templates.find((t) => t.id === selId) || templates[0] || null; // open on a saved template, not a blank form
   const draw = () => {
     dlgOpen(`<h3 style="margin-top:0">Email templates</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
