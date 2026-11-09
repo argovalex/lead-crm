@@ -9,6 +9,7 @@ const config = require('../config');
 const { getProvider } = require('../services/provider');
 const mailimport = require('../services/mailimport');
 const segments = require('../services/segments');
+const leadimport = require('../services/leadimport');
 const { suggestReply } = require('../services/suggest');
 
 const router = express.Router();
@@ -52,7 +53,7 @@ router.get('/leads', wrap(async (req, res) => {
   if (source) where.source = source;
   if (stale === 'true') where.stale = true;
   if (inactiveDays) where.lastActivityAt = { lt: new Date(Date.now() - Number(inactiveDays) * email.DAY) };
-  if (q) where.OR = ['name', 'email', 'company', 'phone', 'segment'].map((f) => ({ [f]: { contains: q, mode: 'insensitive' } }));
+  if (q) where.OR = ['name', 'email', 'company', 'phone', 'segment', 'website', 'notes', 'country'].map((f) => ({ [f]: { contains: q, mode: 'insensitive' } }));
   const rows = await prisma.lead.findMany({ where, orderBy: { lastActivityAt: 'desc' }, take: 1000 });
   res.json(rows);
 }));
@@ -190,6 +191,7 @@ router.post('/sequences/:id/enroll', wrap(async (req, res) => {
 
 // ---------- CSV import ----------
 const HEADER_MAP = {
+  ...leadimport.EXTRA_HEADERS,
   name: 'name', 'full name': 'name', 'שם': 'name', 'שם מלא': 'name',
   email: 'email', 'e-mail': 'email', 'אימייל': 'email', 'מייל': 'email', 'דוא"ל': 'email',
   phone: 'phone', 'טלפון': 'phone', 'נייד': 'phone',
@@ -215,15 +217,24 @@ router.post('/import', upload.single('file'), wrap(async (req, res) => {
   } catch (e) {
     return res.status(400).json({ error: 'invalid_csv', detail: e.message });
   }
-  const result = { created: 0, duplicates: [], invalid: [] };
+  const result = { created: 0, updated: 0, duplicates: [], invalid: [], noEmail: [] };
   const seen = new Set();
-  const existing = new Set((await prisma.lead.findMany({ select: { email: true } })).map((l) => l.email));
-  for (const [i, r] of records.entries()) {
+  const byEmail = new Map((await prisma.lead.findMany()).map((l) => [l.email, l]));
+  for (const [i, raw] of records.entries()) {
+    const r = leadimport.normalizeRow(raw);
     const em = leads.normEmail(r.email);
     const row = i + 2;
+    if (!em) { result.noEmail.push({ row, name: r.name || r.company || '', phone: r.phone || '' }); continue; }
     if (!leads.isEmail(em)) { result.invalid.push({ row, reason: 'invalid_email' }); continue; }
-    if (seen.has(em) || existing.has(em)) { result.duplicates.push({ row, email: em }); continue; }
+    if (seen.has(em)) { result.duplicates.push({ row, email: em }); continue; }
     seen.add(em);
+    const existing = byEmail.get(em);
+    if (existing) {
+      // Already in the system: fill only the fields it is missing, never overwrite.
+      const patch = leadimport.fillPatch(existing, r, leads.normTags);
+      if (Object.keys(patch).length) { await prisma.lead.update({ where: { id: existing.id }, data: patch }); result.updated += 1; } else result.duplicates.push({ row, email: em });
+      continue;
+    }
     try {
       await leads.createLead({ ...r, name: r.name || em.split('@')[0], email: em, source: r.source || req.body.source || 'csv' });
       result.created += 1;

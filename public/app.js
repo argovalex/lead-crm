@@ -124,12 +124,19 @@ async function renderLeads() {
   if (v('#f-segment')) p.set('segment', v('#f-segment'));
   if ($('#f-stale').checked) p.set('stale', 'true');
   const rows = await api(`/leads?${p}`);
+  const host = (u) => String(u || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
   $('#leads-body').innerHTML = rows.length ? rows.map((l) => `
-    <tr data-id="${l.id}">
+    <tr data-id="${l.id}" data-name="${esc(l.name)}">
       <td><input type="checkbox" class="sel" value="${l.id}"></td>
-      <td>${esc(l.name)}</td><td>${esc(l.email)}</td><td>${esc(l.company)}</td><td>${esc(l.segment)}</td><td>${esc(l.country)}</td><td>${esc(l.priority)}</td>
+      <td class="c-org"><b>${esc(l.company || l.name)}</b>${l.company && l.company !== l.name ? `<div class="muted">${esc(l.name)}</div>` : ''}</td>
+      <td>${esc(l.country)}</td>
+      <td>${esc(l.segment)}</td>
+      <td>${l.priority ? `<span class="flag prio-${esc(l.priority)}">${esc(l.priority)}</span>` : ''}</td>
+      <td>${(l.tags || []).map((t) => `<span class="flag">${esc(t)}</span>`).join(' ')}</td>
+      <td>${l.website ? `<a href="${esc(/^https?:/i.test(l.website) ? l.website : `https://${l.website}`)}" target="_blank" rel="noopener" dir="ltr">${esc(host(l.website))}</a>` : ''}</td>
+      <td class="c-contact" dir="ltr"><div>${esc(l.email)}</div>${l.phone ? `<div class="muted">${esc(l.phone)}</div>` : ''}</td>
+      <td class="c-why" title="${esc(l.notes)}">${esc(l.notes)}</td>
       <td><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span></td>
-      <td>${esc(l.source)}</td><td>${(l.tags || []).map(esc).join(', ')}</td>
       <td title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}${l.stale ? ' <span class="flag warn">רדום</span>' : ''}</td>
       <td><button class="btn sm ghost danger" data-del="${l.id}" data-name="${esc(l.name)}" title="מחיקה" aria-label="מחיקה">🗑</button></td>
     </tr>`).join('') : '<tr><td colspan="12" class="muted">אין לידים תואמים</td></tr>';
@@ -575,7 +582,7 @@ function editSequence(seq) {
 // ---------------- One email to several selected leads ----------------
 function bulkMailModal(ids) {
   const rows = [...document.querySelectorAll('#leads-body tr[data-id]')].filter((tr) => ids.includes(+tr.dataset.id));
-  const names = rows.map((tr) => tr.children[1].textContent.trim());
+  const names = rows.map((tr) => tr.dataset.name);
   const form = modal(`<h3>מייל ל-${ids.length} לידים</h3>
     <div class="rcpts">${names.slice(0, 12).map((n) => `<span class="flag">${esc(n)}</span>`).join('')}${names.length > 12 ? `<span class="flag">+${names.length - 12}</span>` : ''}</div>
     <p class="muted">זה מייל בודד ולא קמפיין: כל ליד מקבל מייל משלו, הוא נרשם בציר הזמן שלו, ואחרי השליחה נוצר לו מעקב ל-5 ימים. תשובות יופיעו בטאב "דואר". לידים שהסירו את עצמם או שהכתובת שלהם חוזרת ידולגו.</p>
@@ -713,7 +720,8 @@ $('#import-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
     const r = await api('/import', { method: 'POST', body: new FormData(e.target) });
-    $('#import-result').innerHTML = `<p><b>${r.created}</b> לידים נוצרו · <b>${r.duplicates.length}</b> כפילויות דולגו · <b>${r.invalid.length}</b> שורות לא תקינות</p>
+    $('#import-result').innerHTML = `<p><b>${r.created}</b> לידים נוצרו · <b>${r.updated}</b> עודכנו (שדות חסרים הושלמו) · <b>${r.duplicates.length}</b> ללא שינוי · <b>${r.noEmail.length}</b> בלי מייל · <b>${r.invalid.length}</b> שורות לא תקינות</p>
+      ${r.noEmail.length ? `<details open><summary>שורות בלי כתובת מייל (לא נוצרו)</summary>${r.noEmail.map((d) => `שורה ${d.row}: ${esc(d.name)} ${esc(d.phone)}`).join('<br>')}</details>` : ''}
       ${r.duplicates.length ? `<details><summary>כפילויות</summary>${r.duplicates.map((d) => `שורה ${d.row}: ${esc(d.email)}`).join('<br>')}</details>` : ''}
       ${r.invalid.length ? `<details><summary>שורות לא תקינות</summary>${r.invalid.map((d) => `שורה ${d.row}: ${esc(d.reason)}`).join('<br>')}</details>` : ''}`;
     e.target.reset();

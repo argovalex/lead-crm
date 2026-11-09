@@ -124,7 +124,7 @@
     </div>
     <div class="table-wrap">
       <table class="tbl">
-        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>שם</th><th>אימייל</th><th>חברה</th><th>סוג</th><th>מדינה</th><th>עד׳</th><th>שלב</th><th>מקור</th><th>תגיות</th><th>פעילות אחרונה</th><th></th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>ארגון</th><th>מדינה</th><th>סוג</th><th>עד׳</th><th>התאמה</th><th>אתר</th><th>איש קשר</th><th>למה יקנו</th><th>שלב</th><th>פעילות אחרונה</th><th></th></tr></thead>
         <tbody id="leads-body"></tbody>
       </table>
     </div>
@@ -145,7 +145,7 @@
   <section id="view-import" class="view hidden">
     <div class="panel">
       <h2>ייבוא לידים מ-CSV</h2>
-      <p class="muted">עמודות נתמכות (אנגלית או עברית): name/שם, email/אימייל, phone/טלפון, company/חברה, source/מקור, tags/תגיות (מופרדות בפסיק), notes/הערות, owner/אחראי. כפילויות לפי אימייל מדולגות.</p>
+      <p class="muted">עמודות נתמכות (אנגלית או עברית): name/שם, email/אימייל, phone/טלפון, company/חברה, source/מקור, tags/תגיות, notes/הערות, country/מדינה, segment/סגמנט, priority/עדיפות, website/אתר. גם גיליון מחקר עם Organization, Product Fit, Why They'd Buy, Website, Contact Email / Phone (מפוצל אוטומטית למייל וטלפון). ליד שכבר קיים לא נדרס: רק שדות ריקים בו מתמלאים, כך שאפשר לייבא שוב את אותו קובץ כדי להשלים נתונים חסרים. שורה בלי מייל (טלפון בלבד) לא נוצרת ומוצגת ברשימה.</p>
       <form id="import-form">
         <input type="file" name="file" accept=".csv,text/csv" required>
         <input name="source" placeholder="מקור ברירת מחדל (אופציונלי)">
