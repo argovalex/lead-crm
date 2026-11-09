@@ -201,6 +201,7 @@ async function handleEvent(eventId, event, db = prisma, now = new Date()) {
       email: from, name, kind: 'EMAIL_IN', at: now, subject: d.subject || null,
       body: body ? body.slice(0, 8000) : '(תוכן ההודעה לא נטען. למפתח ה-API של Resend צריכה להיות הרשאת Full access כדי לקרוא מיילים נכנסים. את ההודעה אפשר לראות ב-Resend תחת Emails, Receiving.)', source: 'inbound reply',
     }, db);
+    try { await require('./gmdss').logReply(db, from, d.subject, body, now); } catch (e) { console.error('gmdss reply log failed', e.message); }
     return { handled: true, leadId: res.leadId, created: res.created };
   }
 

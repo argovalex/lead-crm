@@ -4,7 +4,7 @@ const config = require('../config');
 const settings = require('../services/settings');
 const { getProvider } = require('../services/provider');
 const { renderRich, renderPlain, htmlToText } = require('../services/render');
-const { VARIABLES, merge, parseCsv, importRows } = require('../services/gmdss');
+const { VARIABLES, merge, parseCsv, importRows, logActivity } = require('../services/gmdss');
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -56,11 +56,38 @@ router.put('/leads/:id', wrap(async (req, res) => {
     if (!EMAIL_RE.test(data.email)) throw bad('invalid_email');
   }
   if (data.priority && !['A', 'B', 'C'].includes(data.priority)) throw bad('priority_must_be_A_B_or_C');
+  if ('followUpAt' in (req.body || {})) {
+    const f = req.body.followUpAt ? new Date(req.body.followUpAt) : null;
+    if (f && Number.isNaN(f.getTime())) throw bad('invalid_follow_up_date');
+    data.followUpAt = f;
+  }
+  if ('notes' in (req.body || {})) data.notes = String(req.body.notes || '').trim() || null;
   if ('email' in data && data.email !== (cur.email || null)) {
     Object.assign(data, { emailStatus: 'not_sent', lastError: null, lastEmailedAt: null, providerId: null, deliveredAt: null, openedAt: null, clickedAt: null, bouncedAt: null, lastClickLink: null, openCount: 0, clickCount: 0 });
   }
-  try { res.json(await prisma.gmdssLead.update({ where: { id }, data, include: { template: { select: { id: true, name: true } } } })); }
+  let out;
+  try { out = await prisma.gmdssLead.update({ where: { id }, data, include: { template: { select: { id: true, name: true } } } }); }
   catch (e) { if (e.code === 'P2002') throw bad('duplicate_lead', 409); throw e; }
+  const changed = [...EDITABLE, 'notes'].filter((k) => k in data && (data[k] ?? null) !== (cur[k] ?? null));
+  if (changed.includes('email')) await logActivity(prisma, id, 'email_changed', `${cur.email || '(none)'} -> ${data.email || '(none)'} (send status reset)`);
+  const other = changed.filter((k) => k !== 'email' && k !== 'notes');
+  if (other.length) await logActivity(prisma, id, 'edited', other.join(', '));
+  if ('followUpAt' in data && String(data.followUpAt || '') !== String(cur.followUpAt || '')) {
+    await logActivity(prisma, id, 'follow_up', data.followUpAt ? `Follow-up set for ${data.followUpAt.toISOString().slice(0, 10)}` : 'Follow-up cleared');
+  }
+  res.json(out);
+}));
+
+// Customer card: activity timeline + manual notes.
+router.get('/leads/:id/activities', wrap(async (req, res) => {
+  res.json(await prisma.gmdssActivity.findMany({ where: { leadId: Number(req.params.id) }, orderBy: { createdAt: 'desc' }, take: 300 }));
+}));
+router.post('/leads/:id/activities', wrap(async (req, res) => {
+  const detail = String((req.body && req.body.detail) || '').trim();
+  if (!detail) throw bad('detail_required');
+  const id = Number(req.params.id);
+  if (!(await prisma.gmdssLead.findUnique({ where: { id } }))) throw bad('not_found', 404);
+  res.status(201).json(await logActivity(prisma, id, 'note', detail));
 }));
 
 // Idempotent CSV import (same logic as scripts/import-gmdss.js). Body: { csv: "<file text>" }.
@@ -88,6 +115,10 @@ router.post('/assign', wrap(async (req, res) => {
   const { ids, templateId } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) throw bad('no_leads_selected');
   const n = await prisma.gmdssLead.updateMany({ where: { id: { in: ids.map(Number).filter(Number.isInteger) } }, data: { templateId: templateId ? Number(templateId) : null } });
+  if (templateId) {
+    const t = await prisma.gmdssTemplate.findUnique({ where: { id: Number(templateId) } });
+    for (const id of ids.map(Number).filter(Number.isInteger)) await logActivity(prisma, id, 'template', `Attached template: ${t ? t.name : templateId}`);
+  }
   res.json({ updated: n.count });
 }));
 
@@ -142,8 +173,10 @@ router.post('/send', wrap(async (req, res) => {
           const b = await build(l, subject, body);
           const { providerId } = await getProvider().send({ to: l.email, subject: b.subject, html: b.html, text: b.text, idempotencyKey: `gmdss:${l.id}:${stamp}` });
           await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null, providerId, deliveredAt: null, openedAt: null, clickedAt: null, bouncedAt: null, lastClickLink: null, openCount: 0, clickCount: 0 } });
+          await logActivity(prisma, l.id, 'sent', `${b.subject}  [template: ${tpl.name}]`);
         } catch (e) {
           await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'failed', lastError: String(e.message).slice(0, 300) } });
+          await logActivity(prisma, l.id, 'failed', String(e.message).slice(0, 300));
         }
       }
     } finally { sending = false; }

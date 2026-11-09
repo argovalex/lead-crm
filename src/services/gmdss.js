@@ -81,6 +81,18 @@ function merge(tpl, lead) {
 }
 
 // Resend webhook events for emails sent from the GMDSS page. Returns true when the event belonged to a GMDSS lead.
+const logActivity = (prisma, leadId, type, detail, at) =>
+  prisma.gmdssActivity.create({ data: { leadId, type, detail: detail ? String(detail).slice(0, 1000) : null, ...(at ? { createdAt: at } : {}) } });
+
+// An inbound reply from a GMDSS lead's address: mark the lead and add it to the timeline.
+async function logReply(prisma, email, subject, body, now = new Date()) {
+  const l = await prisma.gmdssLead.findFirst({ where: { email: { equals: String(email).toLowerCase(), mode: 'insensitive' } } });
+  if (!l) return false;
+  await prisma.gmdssLead.update({ where: { id: l.id }, data: { repliedAt: now } });
+  await logActivity(prisma, l.id, 'replied', `${subject || ''}${body ? `\n${String(body).slice(0, 600)}` : ''}`.trim(), now);
+  return true;
+}
+
 async function handleGmdssEvent(prisma, event, now = new Date()) {
   const d = event.data || {};
   if (!d.email_id) return false;
@@ -95,7 +107,9 @@ async function handleGmdssEvent(prisma, event, now = new Date()) {
   } else if (event.type === 'email.bounced') { data.bouncedAt = now; data.emailStatus = 'bounced'; }
   else return true;
   await prisma.gmdssLead.update({ where: { id: l.id }, data });
+  const label = { 'email.delivered': 'delivered', 'email.opened': 'opened', 'email.clicked': 'clicked', 'email.bounced': 'bounced' }[event.type];
+  await logActivity(prisma, l.id, label, event.type === 'email.clicked' && d.click ? d.click.link : null, now);
   return true;
 }
 
-module.exports = { handleGmdssEvent, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+module.exports = { handleGmdssEvent, logActivity, logReply, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };

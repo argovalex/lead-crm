@@ -11,7 +11,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const COLS = [
   ['organization', 'Organization'], ['country', 'Country'], ['segment', 'Segment'], ['productFit', 'Product Fit'],
   ['whyTheydBuy', "Why They'd Buy"], ['website', 'Website'], ['email', 'Email'], ['phone', 'Phone'], ['priority', 'Priority'],
-  ['template', 'Template'], ['emailStatus', 'Email Status'], ['engagement', 'Delivered / Opened / Clicked'], ['lastEmailedAt', 'Last Emailed'], ['id', 'ID'],
+  ['template', 'Template'], ['emailStatus', 'Email Status'], ['engagement', 'Delivered / Opened / Clicked'], ['lastEmailedAt', 'Last Emailed'], ['followUpAt', 'Follow-up'], ['id', 'ID'],
 ];
 const LTR = new Set(['website', 'email', 'phone']);
 const TEXT = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
@@ -48,6 +48,8 @@ function filtered() {
     if (eng === 'clicked' && !l.clickedAt) return false;
     if (eng === 'unopened' && !(l.emailStatus === 'sent' && !l.openedAt)) return false;
     if (eng === 'failed' && !['failed', 'bounced'].includes(l.emailStatus)) return false;
+    if (eng === 'replied' && !l.repliedAt) return false;
+    if (eng === 'followup' && !(l.followUpAt && new Date(l.followUpAt) <= new Date())) return false;
     return !q || TEXT.some((k) => (l[k] || '').toLowerCase().includes(q));
   });
   const val = (l) => (sortKey === 'template' ? l.template?.name : sortKey === 'engagement' ? engScore(l) : l[sortKey]);
@@ -73,6 +75,8 @@ function cell(l, k) {
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
+  if (k === 'organization') return `<a href="#" data-card="${l.id}" style="font-weight:600" onclick="return false">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="Replied">↩</span>' : ''}`;
+  if (k === 'followUpAt') { const due = new Date(v) <= new Date(); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'Follow-up due' : 'Follow-up'}">${esc(new Date(v).toISOString().slice(0, 10))}</span>`; }
   if (k === 'priority') return `<span class="pb ${esc(v)}">${esc(v)}</span>`;
   if (k === 'website') return `<a href="${esc(v)}" target="_blank" rel="noopener noreferrer">${esc(v.replace(/^https?:\/\/(www\.)?/, ''))}</a>`;
   if (k === 'email') return `<a href="mailto:${esc(v)}">${esc(v)}</a>`;
@@ -314,6 +318,54 @@ $('#imp-file').onchange = async (e) => {
   } catch (err) { toast(err.message, true); }
   e.target.value = '';
 };
+// ---------- Customer card ----------
+const ACT = {
+  sent: ['✉', 'Email sent'], delivered: ['✓', 'Delivered'], opened: ['👁', 'Opened'], clicked: ['↗', 'Clicked a link'],
+  bounced: ['⚠', 'Bounced'], failed: ['⚠', 'Send failed'], replied: ['↩', 'Replied'], template: ['▤', 'Template'],
+  edited: ['✎', 'Lead edited'], email_changed: ['✎', 'Email changed'], follow_up: ['⏰', 'Follow-up'], note: ['📝', 'Note'],
+};
+async function openCard(id) {
+  const l = leads.find((x) => x.id === id);
+  if (!l) return;
+  let acts = [];
+  try { acts = await api(`/leads/${id}/activities`); } catch (e) { toast(e.message, true); }
+  const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+  const row = ([h, v]) => (v ? `<div style="display:flex;gap:8px"><span class="muted" style="min-width:110px">${h}</span><span dir="ltr">${esc(v)}</span></div>` : '');
+  dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+      <h3 style="margin:0">${esc(l.organization)} ${l.priority ? `<span class="pb ${esc(l.priority)}">${esc(l.priority)}</span>` : ''}</h3>
+      <div><button class="btn sm" id="cd-edit">✎ Edit</button> <button class="btn sm" id="cd-close">✕</button></div></div>
+    <div style="margin:8px 0;display:grid;gap:3px;font-size:13px">
+      ${[['Country', l.country], ['Segment', l.segment], ['Product Fit', l.productFit], ['Website', l.website], ['Email', l.email], ['Phone', l.phone],
+        ["Why They'd Buy", l.whyTheydBuy], ['Template', l.template && l.template.name], ['Email status', l.emailStatus],
+        ['Last emailed', fmt(l.lastEmailedAt)], ['Replied', fmt(l.repliedAt)]].map(row).join('')}
+    </div>
+    <div class="toolbar wrap" style="margin:10px 0">
+      <label style="margin:0">Follow-up date <input type="date" id="cd-fu" value="${day(l.followUpAt)}"></label>
+      <button class="btn sm" id="cd-fu-save">Save date</button>
+      <button class="btn sm" id="cd-fu-clear">Clear</button>
+    </div>
+    <label>Add a note (call, meeting, reply, anything)
+      <textarea id="cd-note" rows="2" dir="ltr" style="width:100%"></textarea></label>
+    <div class="toolbar" style="margin:6px 0 12px"><button class="btn primary sm" id="cd-note-add">Add note</button></div>
+    <h4 style="margin:0 0 6px">Activity</h4>
+    <div id="cd-acts" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px">
+      ${acts.map((a) => { const [ico, lab] = ACT[a.type] || ['•', a.type];
+        return `<div style="padding:6px 10px;border-bottom:1px solid var(--line);font-size:13px"><span class="muted" style="font-size:12px">${esc(fmt(a.createdAt))}</span>
+          <b>${ico} ${lab}</b>${a.detail ? `<div dir="ltr" style="white-space:pre-wrap;color:#444">${esc(a.detail)}</div>` : ''}</div>`; }).join('')
+        || '<div class="muted" style="padding:10px">No activity yet</div>'}
+    </div>`);
+  $('#cd-close').onclick = dlgClose;
+  $('#cd-edit').onclick = () => editLead(id);
+  const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('Saved'); openCard(id); } catch (e) { toast(e.message, true); } };
+  $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);
+  $('#cd-fu-clear').onclick = () => saveFu(null);
+  $('#cd-note-add').onclick = async () => {
+    const detail = $('#cd-note').value.trim();
+    if (!detail) return;
+    try { await api(`/leads/${id}/activities`, { method: 'POST', body: { detail } }); openCard(id); } catch (e) { toast(e.message, true); }
+  };
+}
+
 // ---------- Edit a lead ----------
 const EDIT_FIELDS = [['organization', 'Organization'], ['country', 'Country'], ['segment', 'Segment'], ['productFit', 'Product Fit'],
   ['whyTheydBuy', "Why They'd Buy"], ['website', 'Website'], ['email', 'Email'], ['phone', 'Phone'], ['priority', 'Priority']];
@@ -338,6 +390,8 @@ $('#tbl').addEventListener('click', (e) => {
   const th = e.target.closest('th[data-k]');
   if (th) { sortDir = sortKey === th.dataset.k ? -sortDir : 1; sortKey = th.dataset.k; render(); return; }
   if (e.target.id === 'chk-page') { filtered().filter((l) => l.email).forEach((l) => (e.target.checked ? selected.add(l.id) : selected.delete(l.id))); render(); return; }
+  const cb = e.target.closest('[data-card]');
+  if (cb) { openCard(+cb.dataset.card); return; }
   const eb = e.target.closest('[data-edit]');
   if (eb) { editLead(+eb.dataset.edit); return; }
   if (e.target.classList.contains('rc')) {
