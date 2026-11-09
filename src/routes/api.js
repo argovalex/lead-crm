@@ -406,6 +406,23 @@ router.delete('/sequences/:id', wrap(async (req, res) => {
   res.status(204).end();
 }));
 
+// Moves values that old imports put into tags (priority-A, both, a segment, a country, a website)
+// into their own fields and removes the duplicate tags. ?dry=1 only counts.
+router.post('/leads/split-tags', wrap(async (req, res) => {
+  const rows = await prisma.lead.findMany({ where: { NOT: { tags: { equals: [] } } } });
+  let changed = 0;
+  const filled = { priority: 0, country: 0, segment: 0, website: 0, tagsCleaned: 0 };
+  for (const l of rows) {
+    const p = leadimport.splitTagsPatch(l);
+    if (!Object.keys(p).length) continue;
+    changed += 1;
+    for (const k of ['priority', 'country', 'segment', 'website']) if (p[k]) filled[k] += 1;
+    if (p.tags) filled.tagsCleaned += 1;
+    if (!req.query.dry) await prisma.lead.update({ where: { id: l.id }, data: p });
+  }
+  res.json({ checked: rows.length, changed, filled, applied: !req.query.dry });
+}));
+
 // Fills an empty "segment" from the company name. Never overwrites a value you set. ?dry=1 only counts.
 router.post('/leads/auto-segment', wrap(async (req, res) => {
   const rows = await prisma.lead.findMany({ where: { OR: [{ segment: null }, { segment: '' }] }, select: { id: true, company: true } });

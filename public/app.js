@@ -131,7 +131,6 @@ async function renderLeads() {
       <td class="c-org"><b>${esc(l.company || l.name)}</b>${l.company && l.company !== l.name ? `<div class="muted">${esc(l.name)}</div>` : ''}</td>
       <td>${esc(l.country)}</td>
       <td>${esc(l.segment)}</td>
-      <td>${l.priority ? `<span class="flag prio-${esc(l.priority)}">${esc(l.priority)}</span>` : ''}</td>
       <td>${(l.tags || []).map((t) => `<span class="flag">${esc(t)}</span>`).join(' ')}</td>
       <td>${l.website ? `<a href="${esc(/^https?:/i.test(l.website) ? l.website : `https://${l.website}`)}" target="_blank" rel="noopener" dir="ltr">${esc(host(l.website))}</a>` : ''}</td>
       <td class="c-contact" dir="ltr"><div>${esc(l.email)}</div>${l.phone ? `<div class="muted">${esc(l.phone)}</div>` : ''}</td>
@@ -854,6 +853,22 @@ $('#mail-shown').onclick = () => {
   if (!ids.length) return toast('אין לידים מוצגים', true);
   document.querySelectorAll('#leads-body .sel').forEach((c) => { c.checked = true; });
   bulkMailModal(ids);
+};
+$('#split-tags').onclick = async () => {
+  try {
+    const d = await api('/leads/split-tags?dry=1', { method: 'POST', body: {} });
+    if (!d.changed) return toast(`אין מה לפצל ב-${d.checked} לידים עם תגיות`);
+    const f = d.filled;
+    if (!confirm(`לפצל תגיות לשדות נפרדים?
+${d.changed} לידים ישתנו
+עדיפות: ${f.priority}, מדינה: ${f.country}, סוג: ${f.segment}, אתר: ${f.website}
+תגיות שינוקו: ${f.tagsCleaned}
+(שדות שכבר מלאים לא יידרסו)`)) return;
+    await api('/leads/split-tags', { method: 'POST', body: {} });
+    toast('התגיות פוצלו לשדות');
+    await loadMeta();
+    renderLeads();
+  } catch (err) { fail(err); }
 };
 $('#auto-seg').onclick = async () => {
   try {

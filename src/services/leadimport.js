@@ -46,4 +46,35 @@ function fillPatch(existing, r, normTags) {
   return patch;
 }
 
-module.exports = { EXTRA_HEADERS, normalizeRow, fillPatch };
+const COUNTRIES = new Set(['france', 'spain', 'usa', 'us', 'uk', 'united kingdom', 'australia', 'canada', 'cyprus', 'latvia', 'finland', 'netherlands', 'germany', 'sweden', 'south africa', 'norway', 'new zealand', 'greece', 'croatia', 'ireland', 'singapore', 'antigua', 'mexico', 'italy', 'israel', 'turkey', 'denmark', 'portugal', 'malta', 'montenegro', 'slovenia', 'poland', 'estonia', 'lithuania', 'belgium', 'brazil', 'argentina', 'japan', 'china', 'india', 'uae', 'thailand', 'egypt', 'tunisia', 'morocco']);
+const SEG_RE = /school|academy|college|charter|fleet|rescue|volunteer|club|federation|association|lms|learning|training|stcw|simulat|vendor|distributor|marina|marketplace|authority|institute|boating|yacht/i;
+const URL_RE = /^(https?:\/\/|www\.)\S+$|^[a-z0-9-]+(\.[a-z0-9-]+)+\/?\S*$/i;
+
+// Old imports dumped Priority / Product Fit / Segment / Country into one tags field
+// ("priority-A, both, Sailing & Charter School, Greece, gmdss"). Moves each into its own field and
+// removes the duplicated tags. Only fills empty fields; returns {} when nothing changes.
+function splitTagsPatch(lead) {
+  const patch = {};
+  const keep = [];
+  const country = () => patch.country || lead.country;
+  const segment = () => patch.segment || lead.segment;
+  for (const raw of lead.tags || []) {
+    const s = String(raw).trim();
+    const l = s.toLowerCase();
+    let m;
+    if ((m = l.match(/^(?:priority|prio|עדיפות)[\s:_-]*([abc])$/))) { if (!lead.priority && !patch.priority) patch.priority = m[1].toUpperCase(); if (!lead.priority && patch.priority !== m[1].toUpperCase()) keep.push(s); continue; }
+    if (FIT_LABEL[l]) { keep.push(FIT_LABEL[l]); continue; }
+    if (COUNTRIES.has(l)) { if (!country()) patch.country = s; if (String(country()).toLowerCase() === l) continue; keep.push(s); continue; }
+    if (!lead.website && !patch.website && URL_RE.test(s) && /[./]/.test(s)) { patch.website = s; continue; }
+    if (SEG_RE.test(s)) {
+      if (!segment()) { patch.segment = s; continue; }
+      if (String(segment()).toLowerCase() === l) continue;
+    }
+    keep.push(s);
+  }
+  const tags = [...new Set(keep)];
+  if (tags.join('|') !== (lead.tags || []).join('|')) patch.tags = tags;
+  return patch;
+}
+
+module.exports = { EXTRA_HEADERS, normalizeRow, fillPatch, splitTagsPatch };
