@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GMDSS Outreach Leads</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+.gtable-wrap{overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);max-height:62vh}
+table.g{border-collapse:collapse;width:100%;font-size:13px}
+table.g th,table.g td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
+table.g th{position:sticky;top:0;background:#eef0eb;cursor:pointer;white-space:nowrap;user-select:none}
+table.g td.ltr,table.g th.ltr{direction:ltr;text-align:left}
+table.g td.wide{min-width:220px}
+.pb{display:inline-block;min-width:24px;text-align:center;border-radius:12px;padding:1px 9px;color:#fff;font-weight:700}
+.pb.A{background:#b23a3a}.pb.B{background:#c28a1d}.pb.C{background:#7c8a83}
+.st{font-size:12px;border-radius:6px;padding:1px 7px;background:#e8eae5}
+.st.sent{background:#d6efe1;color:#1f6f54}.st.failed{background:#f5d9d9;color:var(--danger)}.st.queued{background:#f6e8cf;color:var(--warn)}
+.muted-cell{color:#b3b9b4}
+.vars{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.vars button{font-family:monospace;font-size:12px}
+.dlg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;z-index:20}
+.dlg .box{background:#fff;border-radius:12px;padding:20px;max-width:760px;width:94%;max-height:92vh;overflow:auto}
+.prev{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fafaf8;margin-top:6px}
+.warn{color:var(--warn)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">◆ CRM</div>
+  <nav><a class="btn ghost" href="/">← חזרה ל-CRM</a></nav>
+</header>
+<main>
+  <h2 style="margin:0 0 12px">GMDSS Outreach Leads <span class="muted" id="count"></span></h2>
+  <div id="cfgwarn" class="warn hidden" style="margin-bottom:8px"></div>
+  <div class="toolbar wrap">
+    <input id="q" type="search" placeholder="חיפוש בכל השדות" style="min-width:220px">
+    <select id="f-country"><option value="">Country: all</option></select>
+    <select id="f-segment"><option value="">Segment: all</option></select>
+    <select id="f-fit"><option value="">Product Fit: all</option><option>Course</option><option>Simulator</option><option>Both</option></select>
+    <select id="f-priority"><option value="">Priority: all</option><option>A</option><option>B</option><option>C</option></select>
+    <button class="btn ghost" id="reset">אפס</button>
+    <span class="spacer"></span>
+    <button class="btn" id="sel-all">בחר את כל המסוננים</button>
+    <button class="btn" id="sel-none">נקה בחירה</button>
+    <button class="btn primary" id="send" disabled>✉ Send email (<span id="sel-n">0</span>)</button>
+  </div>
+  <div class="gtable-wrap"><table class="g" id="tbl"><thead></thead><tbody></tbody></table></div>
+</main>
+<div id="toast" class="toast"></div>
+<div id="dlg" class="dlg hidden"><div class="box" id="dlg-box"></div></div>
+<script src="/gmdss.js"></script>
+</body>
+</html>

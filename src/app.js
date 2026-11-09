@@ -9,6 +9,7 @@ const leads = require('./services/leads');
 const email = require('./services/email');
 const { verifyWebhook } = require('./services/provider');
 const api = require('./routes/api');
+const gmdssApi = require('./routes/gmdss');
 
 const page = (title, body) => `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
@@ -107,6 +108,7 @@ function createApp() {
     if (req.method !== 'GET' && req.get('x-csrf-token') !== req.session.csrf) return res.status(403).json({ error: 'csrf' });
     next();
   };
+  app.use('/api/gmdss', requireAuth, gmdssApi);
   app.use('/api', requireAuth, api);
 
   app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));

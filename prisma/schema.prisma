@@ -150,3 +150,23 @@ model Setting {
   key   String @id
   value String
 }
+
+// GMDSS outreach campaign leads (separate from Lead). Case-insensitive unique indexes live in the migration SQL.
+model GmdssLead {
+  id            Int       @id @default(autoincrement())
+  organization  String
+  country       String?
+  segment       String?
+  productFit    String?   @map("product_fit")
+  whyTheydBuy   String?   @map("why_theyd_buy")
+  website       String?
+  email         String?
+  phone         String?
+  priority      String?
+  emailStatus   String    @default("not_sent") @map("email_status")
+  lastEmailedAt DateTime? @map("last_emailed_at")
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("gmdss_leads")
+}
