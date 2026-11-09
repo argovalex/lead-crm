@@ -632,8 +632,8 @@ async function renderThread(leadId) {
       </div>`).join('') : '<p class="muted pad">עוד לא נשלח או התקבל מייל מהליד הזה.</p>'}</div>
     ${emailable ? `<form class="th-reply" id="th-form">
       <input name="subject" placeholder="נושא" value="${esc(subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '')}" required>
-      <textarea name="body" rows="5" placeholder="${lastIn ? 'כתוב תשובה…' : 'כתוב מייל…'}" required></textarea>
-      <div class="logrow"><span class="muted">החתימה נוספת אוטומטית. המייל יישלח בדקה הקרובה.</span><button class="btn primary">${lastIn ? 'שלח תשובה' : 'שלח'}</button></div>
+      <textarea name="body" rows="7" placeholder="${lastIn ? 'כתוב תשובה…' : 'כתוב מייל…'}" required></textarea>
+      <div class="logrow"><span class="muted" id="th-hint">החתימה נוספת אוטומטית. המייל יישלח בדקה הקרובה.</span>${lastIn ? '<button type="button" class="btn sm" id="th-suggest">✨ הצעת תשובה</button>' : ''}<button class="btn primary">${lastIn ? 'שלח תשובה' : 'שלח'}</button></div>
     </form>` : '<p class="muted pad">הליד הסיר את עצמו או שהכתובת חוזרת, לא ניתן לשלוח לו.</p>'}
   </div>`;
   const body = $('#mail-thread .th-body');
@@ -641,6 +641,21 @@ async function renderThread(leadId) {
   $('#mail-thread [data-t="card"]').onclick = () => openLead(leadId);
   $('#mail-thread [data-t="del"]').onclick = () => confirmDelete([leadId], lead.name);
   const f = $('#th-form');
+  const suggest = async (force) => {
+    const ta = f && f.querySelector('textarea');
+    if (!ta || !lastIn || (!force && ta.value.trim())) return;
+    const hint = $('#th-hint');
+    hint.textContent = 'מכין הצעת תשובה…';
+    try {
+      const s = await api(`/leads/${leadId}/suggest-reply`, { method: 'POST', body: {} });
+      if (mailSel !== leadId || !document.body.contains(ta) || (!force && ta.value.trim())) return;
+      ta.value = s.text;
+      hint.textContent = s.source === 'ai' ? 'הצעה אוטומטית. בדוק וערוך לפני שליחה.' : 'תבנית בסיסית (חסר ANTHROPIC_API_KEY בשרת להצעה מותאמת). ערוך לפני שליחה.';
+    } catch (err) { hint.textContent = 'לא הצלחתי להכין הצעה, כתוב ידנית.'; }
+  };
+  if (f && lastIn && items[items.length - 1].dir === 'in') suggest(false);
+  const sb = $('#th-suggest');
+  if (sb) sb.onclick = () => suggest(true);
   if (f) f.onsubmit = async (e) => {
     e.preventDefault();
     try {
@@ -691,6 +706,19 @@ $('#sent-form').addEventListener('submit', async (e) => {
     const r = await api('/import-sent', { method: 'POST', body: new FormData(e.target) });
     $('#sent-result').innerHTML = `<p><b>${r.logged}</b> מיילים תועדו (<b>${r.created}</b> לידים חדשים) · <b>${r.skipped.length}</b> כבר מתועדים · <b>${r.invalid.length}</b> שורות לא תקינות</p>
       ${r.invalid.length ? `<details><summary>שורות לא תקינות</summary>${r.invalid.map((d) => `שורה ${d.row}: ${esc(d.reason)}`).join('<br>')}</details>` : ''}`;
+    e.target.reset();
+    loadMeta();
+  } catch (err) { fail(err); }
+});
+
+const EML_REASON = { not_sent_by_you: 'לא נשלח מהכתובת שלך', no_external_recipient: 'אין נמען חיצוני', already_logged: 'כבר מתועד', unparseable: 'קובץ לא תקין' };
+$('#eml-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const r = await api('/import-eml', { method: 'POST', body: new FormData(e.target) });
+    $('#eml-result').innerHTML = `<p><b>${r.logged}</b> מיילים צורפו ללידים (<b>${r.created}</b> לידים חדשים) · <b>${r.skipped.length}</b> דולגו · <b>${r.invalid.length}</b> שגיאות · נבדקו ${r.messages} הודעות</p>
+      ${r.skipped.length ? `<details><summary>דולגו</summary>${r.skipped.map((d) => `${esc(d.label || '')} ${d.email ? `(${esc(d.email)})` : ''}: ${EML_REASON[d.reason] || esc(d.reason)}`).join('<br>')}</details>` : ''}
+      ${r.invalid.length ? `<details><summary>שגיאות</summary>${r.invalid.map((d) => `${esc(d.file || '')} ${esc(d.email || '')}: ${EML_REASON[d.reason] || esc(d.reason)}`).join('<br>')}</details>` : ''}`;
     e.target.reset();
     loadMeta();
   } catch (err) { fail(err); }
@@ -780,6 +808,7 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-action="compose"]')) composeModal(null);
   if (e.target.closest('[data-action="paste-reply"]')) interactionModal('EMAIL_IN');
   if (e.target.closest('[data-action="log-sent"]')) interactionModal('EMAIL_OUT');
+  if (e.target.closest('[data-action="import-eml"]')) { show('import'); setTimeout(() => $('#eml-panel').scrollIntoView({ behavior: 'smooth' }), 50); }
 });
 $('#scrim').onclick = closeDrawer;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });

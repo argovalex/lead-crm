@@ -29,6 +29,7 @@
     <div class="toolbar wrap">
       <button class="btn primary" data-action="compose">✉ מייל חדש</button>
       <button class="btn" data-action="paste-reply">↩ תשובה שהתקבלה</button>
+      <button class="btn" data-action="import-eml">📥 ייבוא מיילים שנשלחו</button>
       <input id="mail-q" placeholder="חיפוש שיחה…">
       <div class="seg" id="mail-filters">
         <button data-f="all" class="on">הכל</button><button data-f="await">ממתינות למענה</button><button data-f="replied">התקבלה תשובה</button><button data-f="campaign">קמפיין</button><button data-f="manual">אישי</button>
@@ -145,6 +146,15 @@
         <button class="btn primary">ייבוא</button>
       </form>
       <div id="sent-result"></div>
+    </div>
+    <div class="panel" id="eml-panel">
+      <h2>ייבוא מיילים שנשלחו מ-alex@alargov.com (קבצי EML / MBOX)</h2>
+      <p class="muted">ב-Gmail: פתח מייל שנשלח, שלוש נקודות, "הורד הודעה" (נשמר כ-EML). אפשר לבחור כמה קבצים יחד. לייצוא גדול: Google Takeout, תיבת "נשלח" בלבד (MBOX). כל נמען חיצוני מקבל רשומה בציר הזמן של הליד עם התאריך האמיתי, ליד שלא קיים ייווצר, והשלב יעבור ל"נוצר קשר". מייל שכבר יובא לא ייספר פעמיים.</p>
+      <form id="eml-form">
+        <input type="file" name="files" accept=".eml,.mbox,message/rfc822" multiple required>
+        <button class="btn primary">ייבוא</button>
+      </form>
+      <div id="eml-result"></div>
     </div>
   </section>
 </main>

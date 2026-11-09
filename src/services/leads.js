@@ -97,7 +97,7 @@ async function logInteraction(leadId, input, db = prisma) {
   if (!lead) throw Object.assign(new Error('not_found'), { status: 404 });
   const at = input.at ? new Date(input.at) : new Date();
   if (Number.isNaN(at.getTime())) throw Object.assign(new Error('invalid_date'), { status: 400 });
-  const data = { subject: input.subject || null, body: input.body || null, manual: true };
+  const data = { subject: input.subject || null, body: input.body || null, manual: true, ...(input.messageId ? { messageId: input.messageId } : {}) };
   await db.activity.create({ data: { leadId, type: spec.act, data, createdAt: at } });
   const upd = { lastActivityAt: lead.lastActivityAt > at ? lead.lastActivityAt : at, stale: false };
   if (spec.dir === 'in') {

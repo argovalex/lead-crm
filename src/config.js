@@ -7,6 +7,7 @@ module.exports = {
   adminPasswordHash: process.env.ADMIN_PASSWORD_HASH,
   adminPassword: process.env.ADMIN_PASSWORD,
   sessionSecret: process.env.SESSION_SECRET,
+  anthropicKey: process.env.ANTHROPIC_API_KEY,
   resendApiKey: process.env.RESEND_API_KEY,
   webhookSecret: process.env.WEBHOOK_SECRET,
   emailFrom: process.env.EMAIL_FROM,

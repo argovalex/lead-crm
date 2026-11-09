@@ -7,9 +7,11 @@ const email = require('../services/email');
 const settings = require('../services/settings');
 const config = require('../config');
 const { getProvider } = require('../services/provider');
+const mailimport = require('../services/mailimport');
+const { suggestReply } = require('../services/suggest');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const id = (v) => {
   const n = parseInt(v, 10);
@@ -412,6 +414,23 @@ router.get('/leads/:id/thread', wrap(async (req, res) => {
   ]);
   if (!lead) return res.status(404).json({ error: 'not_found' });
   res.json({ lead, items: mailItems(msgs, acts) });
+}));
+
+router.post('/leads/:id/suggest-reply', wrap(async (req, res) => {
+  const leadId = id(req.params.id);
+  const [lead, msgs, acts] = await Promise.all([
+    prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, name: true, company: true } }),
+    prisma.emailMessage.findMany({ where: { leadId, status: { in: MSG_OK.in } }, orderBy: { createdAt: 'asc' }, select: MSG_SEL }),
+    prisma.activity.findMany({ where: { leadId, type: { in: MAIL_ACTS } }, orderBy: { createdAt: 'asc' }, select: { leadId: true, type: true, data: true, createdAt: true } }),
+  ]);
+  if (!lead) return res.status(404).json({ error: 'not_found' });
+  res.json(await suggestReply(lead, mailItems(msgs, acts)));
+}));
+
+// Import mail sent by hand from alex@alargov.com: .eml files or an .mbox export (Gmail / Google Takeout).
+router.post('/import-eml', upload.array('files', 200), wrap(async (req, res) => {
+  if (!req.files || !req.files.length) return res.status(400).json({ error: 'file_required' });
+  res.json(await mailimport.importSent(req.files, { source: req.body.source || undefined }));
 }));
 
 // One-off email to several selected leads (not a campaign): each gets its own queued message,
