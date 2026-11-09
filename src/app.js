@@ -11,7 +11,7 @@ const { verifyWebhook } = require('./services/provider');
 const api = require('./routes/api');
 const gmdssApi = require('./routes/gmdss');
 
-const page = (title, body) => `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+const page = (title, body) => `<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
 <style>body{font-family:system-ui,Arial,sans-serif;background:#f4f6f8;display:grid;place-items:center;min-height:100vh;margin:0;color:#1d2733}
 .c{background:#fff;padding:32px;border-radius:12px;max-width:420px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.06)}
@@ -49,15 +49,15 @@ function createApp() {
   // POST is the RFC 8058 one-click endpoint used by Gmail/Outlook via List-Unsubscribe-Post. ----
   app.get('/u/:token', async (req, res) => {
     const lead = await prisma.lead.findUnique({ where: { unsubToken: req.params.token } });
-    if (!lead) return res.status(404).send(page('לא נמצא', '<p>הקישור אינו תקף.</p>'));
-    if (lead.unsubscribed) return res.send(page('הוסרת', '<h2>הוסרת מרשימת התפוצה</h2><p>לא תקבל/י מאיתנו מיילים נוספים.</p>'));
-    res.send(page('הסרה מרשימת תפוצה', `<h2>הסרה מרשימת התפוצה</h2><p>${lead.email.replace(/[<>&"]/g, '')}</p>
-      <form method="post"><button type="submit">הסר אותי</button></form>`));
+    if (!lead) return res.status(404).send(page('Not found', '<p>This link is not valid.</p>'));
+    if (lead.unsubscribed) return res.send(page('Unsubscribed', '<h2>You have been unsubscribed</h2><p>You will not receive further emails from us.</p>'));
+    res.send(page('Unsubscribe', `<h2>Unsubscribe</h2><p>${lead.email.replace(/[<>&"]/g, '')}</p>
+      <form method="post"><button type="submit">Unsubscribe me</button></form>`));
   });
   app.post('/u/:token', express.urlencoded({ extended: false }), async (req, res) => {
     const lead = await leads.unsubscribe(req.params.token);
-    if (!lead) return res.status(404).send(page('לא נמצא', '<p>הקישור אינו תקף.</p>'));
-    res.send(page('הוסרת', '<h2>הוסרת מרשימת התפוצה</h2><p>לא תקבל/י מאיתנו מיילים נוספים.</p>'));
+    if (!lead) return res.status(404).send(page('Not found', '<p>This link is not valid.</p>'));
+    res.send(page('Unsubscribed', '<h2>You have been unsubscribed</h2><p>You will not receive further emails from us.</p>'));
   });
 
   // ---- Auth ----

@@ -23,14 +23,13 @@ function buildEmail(lead, subject, body, opts = {}) {
   const url = unsubUrl(lead);
   const s = renderVars(subject, lead);
   const b = renderVars(body, lead);
-  const rtl = /[\u0590-\u05FF]/.test(b);
   const sig = opts.signatureHtml || '';
-  const html = `<div dir="${rtl ? 'rtl' : 'ltr'}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6">`
+  const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">`
     + renderRich(b)
     + (sig ? `<div style="margin-top:20px">${sig}</div>` : '')
     + `<hr style="border:none;border-top:1px solid #ddd;margin:24px 0 8px"><p style="font-size:12px;color:#888">`
-    + `<a href="${url}" style="color:#888">${rtl ? 'הסרה מרשימת התפוצה' : 'Unsubscribe'}</a></p></div>`;
-  const text = `${renderPlain(b)}${sig ? `\n\n${htmlToText(sig)}` : ''}\n\n--\n${rtl ? 'להסרה' : 'Unsubscribe'}: ${url}`;
+    + `<a href="${url}" style="color:#888">Unsubscribe</a></p></div>`;
+  const text = `${renderPlain(b)}${sig ? `\n\n${htmlToText(sig)}` : ''}\n\n--\nUnsubscribe: ${url}`;
   const headers = { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' };
   return { subject: s, html, text, headers };
 }

@@ -25,11 +25,10 @@ async function build(lead, subject, body) {
   const s = merge(subject, lead);
   const b = merge(body, lead);
   const sig = (await settings.getAll()).signatureHtml || '';
-  const rtl = /[֐-׿]/.test(b.text);
-  const html = `<div dir="${rtl ? 'rtl' : 'ltr'}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6">`
+  const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">`
     + renderRich(b.text) + (sig ? `<div style="margin-top:20px">${sig}</div>` : '')
-    + `<p style="font-size:12px;color:#888;margin-top:24px">${rtl ? 'לא מעוניינים? השיבו "הסר" ולא נפנה שוב.' : 'Not interested? Reply "unsubscribe" and we will not contact you again.'}</p></div>`;
-  const text = `${renderPlain(b.text)}${sig ? `\n\n${htmlToText(sig)}` : ''}\n\n--\n${rtl ? 'לא מעוניינים? השיבו "הסר".' : 'Not interested? Reply "unsubscribe".'}`;
+    + `<p style="font-size:12px;color:#888;margin-top:24px">Not interested? Reply "unsubscribe" and we will not contact you again.</p></div>`;
+  const text = `${renderPlain(b.text)}${sig ? `\n\n${htmlToText(sig)}` : ''}\n\n--\nNot interested? Reply "unsubscribe".`;
   return { subject: s.text, html, text, unknown: [...new Set([...s.unknown, ...b.unknown])] };
 }
 
