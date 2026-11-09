@@ -121,17 +121,18 @@ async function renderLeads() {
   if (v('#f-priority')) p.set('priority', v('#f-priority'));
   if (v('#f-country')) p.set('country', v('#f-country'));
   if (v('#f-activity')) p.set('activity', v('#f-activity'));
+  if (v('#f-segment')) p.set('segment', v('#f-segment'));
   if ($('#f-stale').checked) p.set('stale', 'true');
   const rows = await api(`/leads?${p}`);
   $('#leads-body').innerHTML = rows.length ? rows.map((l) => `
     <tr data-id="${l.id}">
       <td><input type="checkbox" class="sel" value="${l.id}"></td>
-      <td>${esc(l.name)}</td><td>${esc(l.email)}</td><td>${esc(l.company)}</td><td>${esc(l.country)}</td><td>${esc(l.priority)}</td>
+      <td>${esc(l.name)}</td><td>${esc(l.email)}</td><td>${esc(l.company)}</td><td>${esc(l.segment)}</td><td>${esc(l.country)}</td><td>${esc(l.priority)}</td>
       <td><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span></td>
       <td>${esc(l.source)}</td><td>${(l.tags || []).map(esc).join(', ')}</td>
       <td title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}${l.stale ? ' <span class="flag warn">רדום</span>' : ''}</td>
       <td><button class="btn sm ghost danger" data-del="${l.id}" data-name="${esc(l.name)}" title="מחיקה" aria-label="מחיקה">🗑</button></td>
-    </tr>`).join('') : '<tr><td colspan="11" class="muted">אין לידים תואמים</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="12" class="muted">אין לידים תואמים</td></tr>';
   $('#leads-body').querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', (e) => {
     if (e.target.matches('input')) return;
     const d = e.target.closest('[data-del]');
@@ -151,6 +152,7 @@ async function loadMeta() {
   fill('#f-tag', meta.tags);
   fill('#f-source', meta.sources);
   fill('#f-country', meta.countries || []);
+  fill('#f-segment', meta.segments || []);
   sequences = await api('/sequences');
   fill('#bulk-seq', sequences.map((s) => String(s.id)), (id) => sequences.find((s) => String(s.id) === id).name);
 }
@@ -834,7 +836,7 @@ $('#bulk-del').onclick = () => {
 };
 let deb;
 ['#board-q', '#f-q'].forEach((s) => $(s).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refreshView, 250); }));
-['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country', '#f-activity'].forEach((s) => $(s).addEventListener('change', renderLeads));
+['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country', '#f-activity', '#f-segment'].forEach((s) => $(s).addEventListener('change', renderLeads));
 $('#sel-all').onchange = (e) => document.querySelectorAll('.sel').forEach((c) => { c.checked = e.target.checked; });
 $('#bulk-enroll').onclick = async () => {
   const seqId = $('#bulk-seq').value;

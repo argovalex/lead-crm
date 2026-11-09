@@ -35,7 +35,7 @@ const ACTIVITY_FILTERS = {
   failed: ['EMAIL_FAILED'],
 };
 router.get('/leads', wrap(async (req, res) => {
-  const { stage, tag, source, q, inactiveDays, stale, priority, country, activity } = req.query;
+  const { stage, tag, source, q, inactiveDays, stale, priority, country, activity, segment } = req.query;
   const where = {};
   if (activity) {
     const types = ACTIVITY_FILTERS[activity === 'none_mail' ? 'mail_any' : activity];
@@ -44,23 +44,25 @@ router.get('/leads', wrap(async (req, res) => {
   }
   if (priority) where.priority = priority;
   if (country) where.country = country;
+  if (segment) where.segment = segment;
   if (stage) where.stage = stage;
   if (tag) where.tags = { has: tag };
   if (source) where.source = source;
   if (stale === 'true') where.stale = true;
   if (inactiveDays) where.lastActivityAt = { lt: new Date(Date.now() - Number(inactiveDays) * email.DAY) };
-  if (q) where.OR = ['name', 'email', 'company', 'phone'].map((f) => ({ [f]: { contains: q, mode: 'insensitive' } }));
+  if (q) where.OR = ['name', 'email', 'company', 'phone', 'segment'].map((f) => ({ [f]: { contains: q, mode: 'insensitive' } }));
   const rows = await prisma.lead.findMany({ where, orderBy: { lastActivityAt: 'desc' }, take: 1000 });
   res.json(rows);
 }));
 
 router.get('/leads/meta', wrap(async (_req, res) => {
-  const [sources, tags, countries] = await Promise.all([
+  const [sources, tags, countries, segments] = await Promise.all([
     prisma.lead.findMany({ where: { source: { not: null } }, distinct: ['source'], select: { source: true } }),
     prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS tag FROM "Lead" ORDER BY 1`,
     prisma.lead.findMany({ where: { country: { not: null } }, distinct: ['country'], select: { country: true }, orderBy: { country: 'asc' } }),
+    prisma.lead.findMany({ where: { segment: { not: null } }, distinct: ['segment'], select: { segment: true }, orderBy: { segment: 'asc' } }),
   ]);
-  res.json({ stages: leads.STAGES, sources: sources.map((s) => s.source), tags: tags.map((t) => t.tag), countries: countries.map((c) => c.country) });
+  res.json({ stages: leads.STAGES, sources: sources.map((s) => s.source), tags: tags.map((t) => t.tag), countries: countries.map((c) => c.country), segments: segments.map((s) => s.segment).filter(Boolean) });
 }));
 
 router.post('/leads', wrap(async (req, res) => {
