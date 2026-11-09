@@ -848,12 +848,6 @@ $('#bulk-mail').onclick = () => {
   if (!ids.length) return toast('סמן לידים לשליחה', true);
   bulkMailModal(ids);
 };
-$('#mail-shown').onclick = () => {
-  const ids = [...document.querySelectorAll('#leads-body .sel')].map((c) => +c.value);
-  if (!ids.length) return toast('אין לידים מוצגים', true);
-  document.querySelectorAll('#leads-body .sel').forEach((c) => { c.checked = true; });
-  bulkMailModal(ids);
-};
 $('#split-tags').onclick = async () => {
   try {
     const d = await api('/leads/split-tags?dry=1', { method: 'POST', body: {} });
