@@ -5,7 +5,7 @@ const settings = require('../services/settings');
 const { getProvider } = require('../services/provider');
 const { renderRich, renderPlain, htmlToText } = require('../services/render');
 const { suggestReply } = require('../services/suggest');
-const { VARIABLES, merge, parseCsv, importRows, logActivity } = require('../services/gmdss');
+const { VARIABLES, merge, parseCsv, importRows, logActivity, syncReplies } = require('../services/gmdss');
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -37,6 +37,7 @@ async function build(lead, subject, body) {
 router.get('/variables', (_req, res) => res.json({ variables: VARIABLES, emailConfigured: !notConfigured(), setupMessage: notConfigured() ? NOT_CONFIGURED_MSG : null }));
 
 router.get('/leads', wrap(async (_req, res) => {
+  try { await syncReplies(prisma); } catch (e) { console.error('gmdss reply sync failed', e.message); }
   res.json(await prisma.gmdssLead.findMany({ orderBy: { id: 'asc' }, include: { template: { select: { id: true, name: true } } } }));
 }));
 
@@ -94,6 +95,7 @@ async function threadFor(lead) {
 
 // Draft a reply (or a follow-up when the lead has not answered) for the card's reply box.
 router.post('/leads/:id/suggest', wrap(async (req, res) => {
+  try { await syncReplies(prisma); } catch (e) { console.error('gmdss reply sync failed', e.message); }
   const lead = await prisma.gmdssLead.findUnique({ where: { id: Number(req.params.id) } });
   if (!lead) throw bad('not_found', 404);
   const items = await threadFor(lead);
@@ -121,6 +123,7 @@ router.post('/leads/:id/reply', wrap(async (req, res) => {
 
 // Customer card: activity timeline + manual notes.
 router.get('/leads/:id/activities', wrap(async (req, res) => {
+  try { await syncReplies(prisma); } catch (e) { console.error('gmdss reply sync failed', e.message); }
   res.json(await prisma.gmdssActivity.findMany({ where: { leadId: Number(req.params.id) }, orderBy: { createdAt: 'desc' }, take: 300 }));
 }));
 router.post('/leads/:id/activities', wrap(async (req, res) => {

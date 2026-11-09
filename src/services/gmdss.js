@@ -82,15 +82,36 @@ function merge(tpl, lead) {
 
 // Resend webhook events for emails sent from the GMDSS page. Returns true when the event belonged to a GMDSS lead.
 const logActivity = (prisma, leadId, type, detail, at) =>
-  prisma.gmdssActivity.create({ data: { leadId, type, detail: detail ? String(detail).slice(0, 1000) : null, ...(at ? { createdAt: at } : {}) } });
+  prisma.gmdssActivity.create({ data: { leadId, type, detail: detail ? String(detail).slice(0, type === 'replied' || type === 'reply_sent' ? 6000 : 1000) : null, ...(at ? { createdAt: at } : {}) } });
 
 // An inbound reply from a GMDSS lead's address: mark the lead and add it to the timeline.
 async function logReply(prisma, email, subject, body, now = new Date()) {
   const l = await prisma.gmdssLead.findFirst({ where: { email: { equals: String(email).toLowerCase(), mode: 'insensitive' } } });
   if (!l) return false;
   await prisma.gmdssLead.update({ where: { id: l.id }, data: { repliedAt: now } });
-  await logActivity(prisma, l.id, 'replied', `${subject || ''}${body ? `\n${String(body).slice(0, 600)}` : ''}`.trim(), now);
+  await logActivity(prisma, l.id, 'replied', `${subject || ''}${body ? `\n${String(body).slice(0, 5000)}` : ''}`.trim(), now);
   return true;
+}
+
+// Replies that the main CRM already stored (REPLY_IN) become GMDSS timeline entries, so the card and the
+// reply suggestion always see what the lead actually wrote, including replies received before this existed.
+async function syncReplies(prisma) {
+  const emails = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, repliedAt: true } }));
+  if (!emails.length) return;
+  const byEmail = new Map(emails.map((l) => [l.email.toLowerCase(), l]));
+  const ins = await prisma.activity.findMany({
+    where: { type: 'REPLY_IN', lead: { email: { in: [...byEmail.keys()] } } },
+    include: { lead: { select: { email: true } } }, orderBy: { createdAt: 'asc' },
+  });
+  for (const a of ins) {
+    const l = byEmail.get(a.lead.email.toLowerCase());
+    if (!l) continue;
+    const have = await prisma.gmdssActivity.findFirst({ where: { leadId: l.id, type: 'replied', createdAt: a.createdAt } });
+    if (have) continue;
+    const d = a.data || {};
+    await logActivity(prisma, l.id, 'replied', `${d.subject || ''}${d.body ? `\n${String(d.body).slice(0, 5000)}` : ''}`.trim(), a.createdAt);
+    if (!l.repliedAt || l.repliedAt < a.createdAt) { l.repliedAt = a.createdAt; await prisma.gmdssLead.update({ where: { id: l.id }, data: { repliedAt: a.createdAt } }); }
+  }
 }
 
 async function handleGmdssEvent(prisma, event, now = new Date()) {
@@ -112,4 +133,4 @@ async function handleGmdssEvent(prisma, event, now = new Date()) {
   return true;
 }
 
-module.exports = { handleGmdssEvent, logActivity, logReply, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+module.exports = { handleGmdssEvent, logActivity, logReply, syncReplies, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };

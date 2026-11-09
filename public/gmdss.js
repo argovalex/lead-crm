@@ -376,7 +376,7 @@ async function openCard(id) {
     try {
       const r = await api(`/leads/${id}/suggest`, { method: 'POST', body: {} });
       $('#cd-rbody').value = r.text;
-      $('#cd-rhint').textContent = r.source === 'ai' ? 'Draft from Claude. Review and edit before sending.' : 'Basic template (AI key missing or unavailable). Edit before sending.';
+      $('#cd-rhint').textContent = r.source === 'ai' ? (acts.some((a) => a.type === 'replied') ? 'Draft answering their reply. Review and edit before sending.' : 'No reply from them yet, so this is a follow-up draft. Review and edit before sending.') : 'Basic template (AI key missing or unavailable). Edit before sending.';
     } catch (e) { $('#cd-rhint').textContent = ''; toast(e.message, true); }
     b.disabled = false;
   };
