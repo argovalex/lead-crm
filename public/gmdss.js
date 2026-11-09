@@ -84,12 +84,13 @@ function cell(l, k) {
 
 function render() {
   const rows = filtered();
-  $('#tbl thead').innerHTML = `<tr><th><input type="checkbox" id="chk-page" title="בחר את המוצגים"></th>${COLS.map(([k, h]) =>
+  $('#tbl thead').innerHTML = `<tr><th><input type="checkbox" id="chk-page" title="בחר את המוצגים"></th><th></th>${COLS.map(([k, h]) =>
     `<th data-k="${k}" class="${LTR.has(k) ? 'ltr' : ''}">${h}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>`;
   $('#tbl tbody').innerHTML = rows.map((l) => `<tr>
     <td><input type="checkbox" class="rc" data-id="${l.id}" ${selected.has(l.id) ? 'checked' : ''} ${l.email ? '' : 'disabled title="אין אימייל"'}></td>
+    <td><button class="btn sm" data-edit="${l.id}" title="ערוך ליד">✎</button></td>
     ${COLS.map(([k]) => `<td class="${LTR.has(k) ? 'ltr' : ''} ${k === 'whyTheydBuy' ? 'wide' : ''}">${cell(l, k)}</td>`).join('')}</tr>`).join('')
-    || `<tr><td colspan="${COLS.length + 1}" class="muted">אין תוצאות</td></tr>`;
+    || `<tr><td colspan="${COLS.length + 2}" class="muted">אין תוצאות</td></tr>`;
   $('#count').textContent = `${rows.length} / ${leads.length}`;
   $('#sel-n').textContent = selected.size;
   $('#send').disabled = !selected.size;
@@ -313,10 +314,32 @@ $('#imp-file').onchange = async (e) => {
   } catch (err) { toast(err.message, true); }
   e.target.value = '';
 };
+// ---------- Edit a lead ----------
+const EDIT_FIELDS = [['organization', 'Organization'], ['country', 'Country'], ['segment', 'Segment'], ['productFit', 'Product Fit'],
+  ['whyTheydBuy', "Why They'd Buy"], ['website', 'Website'], ['email', 'Email'], ['phone', 'Phone'], ['priority', 'Priority']];
+function editLead(id) {
+  const l = leads.find((x) => x.id === id);
+  if (!l) return;
+  dlgOpen(`<h3 style="margin-top:0">Edit lead</h3>
+    ${EDIT_FIELDS.map(([k, h]) => `<label>${h}${k === 'whyTheydBuy'
+      ? `<textarea data-f="${k}" rows="3" dir="ltr" style="width:100%">${esc(l[k])}</textarea>`
+      : `<input data-f="${k}" value="${esc(l[k])}" dir="ltr" style="width:100%">`}</label>`).join('')}
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Changing the email resets this lead's send status so it can be mailed again.</p>
+    <div class="toolbar" style="margin-top:12px"><button class="btn primary" id="le-save">Save</button><button class="btn" id="le-cancel">Cancel</button></div>`);
+  $('#le-cancel').onclick = dlgClose;
+  $('#le-save').onclick = async () => {
+    const body = {};
+    document.querySelectorAll('#dlg-box [data-f]').forEach((el) => { body[el.dataset.f] = el.value; });
+    try { await api(`/leads/${id}`, { method: 'PUT', body }); dlgClose(); await load(); toast('Lead saved'); } catch (e) { toast(e.message, true); }
+  };
+}
+
 $('#tbl').addEventListener('click', (e) => {
   const th = e.target.closest('th[data-k]');
   if (th) { sortDir = sortKey === th.dataset.k ? -sortDir : 1; sortKey = th.dataset.k; render(); return; }
   if (e.target.id === 'chk-page') { filtered().filter((l) => l.email).forEach((l) => (e.target.checked ? selected.add(l.id) : selected.delete(l.id))); render(); return; }
+  const eb = e.target.closest('[data-edit]');
+  if (eb) { editLead(+eb.dataset.edit); return; }
   if (e.target.classList.contains('rc')) {
     const id = +e.target.dataset.id;
     if (e.target.checked) selected.add(id); else selected.delete(id);

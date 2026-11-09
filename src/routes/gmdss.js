@@ -38,6 +38,31 @@ router.get('/leads', wrap(async (_req, res) => {
   res.json(await prisma.gmdssLead.findMany({ orderBy: { id: 'asc' }, include: { template: { select: { id: true, name: true } } } }));
 }));
 
+// Edit a lead. Changing the email address resets the send state so the corrected address can be mailed again.
+const EDITABLE = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority'];
+router.put('/leads/:id', wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const cur = await prisma.gmdssLead.findUnique({ where: { id } });
+  if (!cur) throw bad('not_found', 404);
+  const data = {};
+  for (const k of EDITABLE) {
+    if (!(k in (req.body || {}))) continue;
+    const v = String(req.body[k] ?? '').trim();
+    data[k] = v || null;
+  }
+  if ('organization' in data && !data.organization) throw bad('organization_required');
+  if (data.email) {
+    data.email = data.email.toLowerCase();
+    if (!EMAIL_RE.test(data.email)) throw bad('invalid_email');
+  }
+  if (data.priority && !['A', 'B', 'C'].includes(data.priority)) throw bad('priority_must_be_A_B_or_C');
+  if ('email' in data && data.email !== (cur.email || null)) {
+    Object.assign(data, { emailStatus: 'not_sent', lastError: null, lastEmailedAt: null, providerId: null, deliveredAt: null, openedAt: null, clickedAt: null, bouncedAt: null, lastClickLink: null, openCount: 0, clickCount: 0 });
+  }
+  try { res.json(await prisma.gmdssLead.update({ where: { id }, data, include: { template: { select: { id: true, name: true } } } })); }
+  catch (e) { if (e.code === 'P2002') throw bad('duplicate_lead', 409); throw e; }
+}));
+
 // Idempotent CSV import (same logic as scripts/import-gmdss.js). Body: { csv: "<file text>" }.
 router.post('/import', wrap(async (req, res) => {
   const csv = req.body && req.body.csv;
