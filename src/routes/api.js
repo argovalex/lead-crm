@@ -21,9 +21,27 @@ const id = (v) => {
 const EDITABLE = ['name', 'phone', 'company', 'source', 'notes', 'owner', 'country', 'segment', 'priority', 'website', 'nextAction'];
 
 // ---------- Leads ----------
+// Search leads by the kind of activity on their timeline.
+const ACTIVITY_FILTERS = {
+  mail_any: ['EMAIL_SENT', 'MANUAL_EMAIL_OUT'],
+  email_sent: ['EMAIL_SENT'],
+  manual_email: ['MANUAL_EMAIL_OUT'],
+  reply: ['REPLY_IN', 'EMAIL_REPLIED'],
+  call: ['CALL'],
+  meeting: ['MEETING'],
+  sms: ['SMS_OUT', 'SMS_IN'],
+  note: ['NOTE'],
+  enrolled: ['SEQUENCE_ENROLLED'],
+  failed: ['EMAIL_FAILED'],
+};
 router.get('/leads', wrap(async (req, res) => {
-  const { stage, tag, source, q, inactiveDays, stale, priority, country } = req.query;
+  const { stage, tag, source, q, inactiveDays, stale, priority, country, activity } = req.query;
   const where = {};
+  if (activity) {
+    const types = ACTIVITY_FILTERS[activity === 'none_mail' ? 'mail_any' : activity];
+    if (!types) return res.status(400).json({ error: 'invalid_activity' });
+    where.activities = activity === 'none_mail' ? { none: { type: { in: types } } } : { some: { type: { in: types } } };
+  }
   if (priority) where.priority = priority;
   if (country) where.country = country;
   if (stage) where.stage = stage;

@@ -120,6 +120,7 @@ async function renderLeads() {
   if (v('#f-inactive')) p.set('inactiveDays', v('#f-inactive'));
   if (v('#f-priority')) p.set('priority', v('#f-priority'));
   if (v('#f-country')) p.set('country', v('#f-country'));
+  if (v('#f-activity')) p.set('activity', v('#f-activity'));
   if ($('#f-stale').checked) p.set('stale', 'true');
   const rows = await api(`/leads?${p}`);
   $('#leads-body').innerHTML = rows.length ? rows.map((l) => `
@@ -820,6 +821,12 @@ $('#bulk-mail').onclick = () => {
   if (!ids.length) return toast('סמן לידים לשליחה', true);
   bulkMailModal(ids);
 };
+$('#mail-shown').onclick = () => {
+  const ids = [...document.querySelectorAll('#leads-body .sel')].map((c) => +c.value);
+  if (!ids.length) return toast('אין לידים מוצגים', true);
+  document.querySelectorAll('#leads-body .sel').forEach((c) => { c.checked = true; });
+  bulkMailModal(ids);
+};
 $('#bulk-del').onclick = () => {
   const ids = [...document.querySelectorAll('.sel:checked')].map((c) => +c.value);
   if (!ids.length) return toast('סמן לידים למחיקה', true);
@@ -827,7 +834,7 @@ $('#bulk-del').onclick = () => {
 };
 let deb;
 ['#board-q', '#f-q'].forEach((s) => $(s).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refreshView, 250); }));
-['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country'].forEach((s) => $(s).addEventListener('change', renderLeads));
+['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country', '#f-activity'].forEach((s) => $(s).addEventListener('change', renderLeads));
 $('#sel-all').onchange = (e) => document.querySelectorAll('.sel').forEach((c) => { c.checked = e.target.checked; });
 $('#bulk-enroll').onclick = async () => {
   const seqId = $('#bulk-seq').value;

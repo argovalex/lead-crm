@@ -97,11 +97,26 @@
         <option value="14">ללא פעילות 14+ ימים</option>
         <option value="30">ללא פעילות 30+ ימים</option>
       </select>
+      <select id="f-activity">
+        <option value="">כל סוגי הפעילות</option>
+        <option value="none_mail">לא נשלח אליהם מייל</option>
+        <option value="mail_any">נשלח אליהם מייל</option>
+        <option value="email_sent">מייל מרצף / קמפיין</option>
+        <option value="manual_email">מייל ידני</option>
+        <option value="reply">התקבלה תשובה</option>
+        <option value="call">שיחת טלפון</option>
+        <option value="meeting">פגישה</option>
+        <option value="sms">SMS</option>
+        <option value="note">הערה</option>
+        <option value="enrolled">נרשמו לרצף</option>
+        <option value="failed">שליחה נכשלה</option>
+      </select>
       <label class="chk"><input type="checkbox" id="f-stale"> מסומנים כרדומים</label>
       <span class="spacer"></span>
       <select id="bulk-seq"><option value="">הוסף מסומנים לרצף…</option></select>
       <button class="btn" id="bulk-enroll">הוסף</button>
       <button class="btn" id="bulk-mail">✉ מייל למסומנים</button>
+      <button class="btn primary" id="mail-shown">✉ מייל לכל המוצגים</button>
       <button class="btn danger" id="bulk-del">מחק מסומנים</button>
       <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
     </div>
