@@ -35,7 +35,7 @@ async function build(lead, subject, body) {
 router.get('/variables', (_req, res) => res.json({ variables: VARIABLES, emailConfigured: !notConfigured(), setupMessage: notConfigured() ? NOT_CONFIGURED_MSG : null }));
 
 router.get('/leads', wrap(async (_req, res) => {
-  res.json(await prisma.gmdssLead.findMany({ orderBy: { id: 'asc' } }));
+  res.json(await prisma.gmdssLead.findMany({ orderBy: { id: 'asc' }, include: { template: { select: { id: true, name: true } } } }));
 }));
 
 // Idempotent CSV import (same logic as scripts/import-gmdss.js). Body: { csv: "<file text>" }.
@@ -45,6 +45,25 @@ router.post('/import', wrap(async (req, res) => {
   let rows;
   try { rows = parseCsv(csv); } catch { throw bad('invalid_csv'); }
   res.json(await importRows(prisma, rows));
+}));
+
+// ---------- Templates ----------
+router.get('/templates', wrap(async (_req, res) => { res.json(await prisma.gmdssTemplate.findMany({ orderBy: { id: 'asc' } })); }));
+const tplData = (b) => {
+  const name = String((b && b.name) || '').trim(), subject = String((b && b.subject) || '').trim(), body = String((b && b.body) || '').trim();
+  if (!name || !subject || !body) throw bad('name_subject_body_required');
+  return { name, subject, body };
+};
+router.post('/templates', wrap(async (req, res) => { res.status(201).json(await prisma.gmdssTemplate.create({ data: tplData(req.body) })); }));
+router.put('/templates/:id', wrap(async (req, res) => { res.json(await prisma.gmdssTemplate.update({ where: { id: Number(req.params.id) }, data: tplData(req.body) })); }));
+router.delete('/templates/:id', wrap(async (req, res) => { await prisma.gmdssTemplate.delete({ where: { id: Number(req.params.id) } }); res.json({ ok: true }); }));
+
+// Attach a template to leads without sending.
+router.post('/assign', wrap(async (req, res) => {
+  const { ids, templateId } = req.body || {};
+  if (!Array.isArray(ids) || !ids.length) throw bad('no_leads_selected');
+  const n = await prisma.gmdssLead.updateMany({ where: { id: { in: ids.map(Number).filter(Number.isInteger) } }, data: { templateId: templateId ? Number(templateId) : null } });
+  res.json({ updated: n.count });
 }));
 
 router.post('/preview', wrap(async (req, res) => {
@@ -73,9 +92,11 @@ let sending = false;
 router.get('/send/status', (_req, res) => res.json({ sending }));
 
 router.post('/send', wrap(async (req, res) => {
-  const { ids, subject, body, includeSent } = req.body || {};
+  const { ids, includeSent, templateId } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) throw bad('no_leads_selected');
-  if (!subject || !body) throw bad('subject_and_body_required');
+  const tpl = templateId ? await prisma.gmdssTemplate.findUnique({ where: { id: Number(templateId) } }) : null;
+  if (!tpl) throw bad('template_required');
+  const { subject, body } = tpl;
   if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
   if (sending) throw bad('send_in_progress', 409);
 
@@ -85,7 +106,7 @@ router.post('/send', wrap(async (req, res) => {
   const skipped = rows.length - eligible.length;
 
   const stamp = Date.now();
-  await prisma.gmdssLead.updateMany({ where: { id: { in: eligible.map((l) => l.id) } }, data: { emailStatus: 'queued', lastError: null } });
+  await prisma.gmdssLead.updateMany({ where: { id: { in: eligible.map((l) => l.id) } }, data: { emailStatus: 'queued', lastError: null, templateId: tpl.id } });
   sending = true;
   (async () => {
     const gap = Math.ceil(60000 / Math.max(1, config.sendsPerMinute));
@@ -94,8 +115,8 @@ router.post('/send', wrap(async (req, res) => {
         if (i) await sleep(gap);
         try {
           const b = await build(l, subject, body);
-          await getProvider().send({ to: l.email, subject: b.subject, html: b.html, text: b.text, idempotencyKey: `gmdss:${l.id}:${stamp}` });
-          await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null } });
+          const { providerId } = await getProvider().send({ to: l.email, subject: b.subject, html: b.html, text: b.text, idempotencyKey: `gmdss:${l.id}:${stamp}` });
+          await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null, providerId, deliveredAt: null, openedAt: null, clickedAt: null, bouncedAt: null, lastClickLink: null, openCount: 0, clickCount: 0 } });
         } catch (e) {
           await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'failed', lastError: String(e.message).slice(0, 300) } });
         }

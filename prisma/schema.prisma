@@ -167,6 +167,28 @@ model GmdssLead {
   lastEmailedAt DateTime? @map("last_emailed_at")
   lastError     String?   @map("last_error")
   createdAt     DateTime  @default(now()) @map("created_at")
+  templateId    Int?      @map("template_id")
+  template      GmdssTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  providerId    String?   @unique @map("provider_id")
+  deliveredAt   DateTime? @map("delivered_at")
+  openedAt      DateTime? @map("opened_at")
+  clickedAt     DateTime? @map("clicked_at")
+  bouncedAt     DateTime? @map("bounced_at")
+  lastClickLink String?   @map("last_click_link")
+  openCount     Int       @default(0) @map("open_count")
+  clickCount    Int       @default(0) @map("click_count")
 
   @@map("gmdss_leads")
+}
+
+model GmdssTemplate {
+  id        Int         @id @default(autoincrement())
+  name      String
+  subject   String
+  body      String
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @default(now()) @updatedAt @map("updated_at")
+  leads     GmdssLead[]
+
+  @@map("gmdss_templates")
 }

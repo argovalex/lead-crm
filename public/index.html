@@ -17,7 +17,7 @@
     <button data-view="leads">לידים</button>
     <button data-view="sequences">קמפיינים</button>
     <button data-view="outbox">אישור קמפיין <span id="ob-count" class="badge hidden"></span></button>
-    <button type="button" onclick="location.href='/gmdss'">GMDSS</button>
+    <button data-view="gmdss">GMDSS</button>
     <button data-view="stats">סטטיסטיקה</button>
     <button data-view="import">ייבוא</button>
     <button data-view="settings">הגדרות</button>
@@ -141,6 +141,10 @@
       <select id="stats-days"><option value="7">7 ימים</option><option value="30" selected>30 ימים</option><option value="90">90 ימים</option><option value="365">שנה</option></select>
     </div>
     <div id="stats"></div>
+  </section>
+
+  <section id="view-gmdss" class="view hidden">
+    <iframe id="gmdss-frame" title="GMDSS Outreach Leads" style="width:100%;height:calc(100vh - 100px);border:0;background:transparent"></iframe>
   </section>
 
   <section id="view-import" class="view hidden">

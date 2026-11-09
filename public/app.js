@@ -821,7 +821,7 @@ $('#set-prev').onclick = async () => {
 
 // ---------------- Wiring ----------------
 let view = 'board';
-const views = { mail: renderMail, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {} };
+const views = { mail: renderMail, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {}, gmdss: async () => { const f = $('#gmdss-frame'); if (!f.getAttribute('src')) f.src = '/gmdss?embed=1'; } };
 function refreshView() { views[view]().catch(fail); }
 function show(v) {
   view = v;

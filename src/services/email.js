@@ -205,7 +205,7 @@ async function handleEvent(eventId, event, db = prisma, now = new Date()) {
   }
 
   const msg = d.email_id && (await db.emailMessage.findUnique({ where: { providerId: d.email_id } }));
-  if (!msg) return { handled: false };
+  if (!msg) return { handled: await require('./gmdss').handleGmdssEvent(db, event, now) };
   const map = {
     'email.delivered': ['deliveredAt', 'EMAIL_DELIVERED'],
     'email.opened': ['openedAt', 'EMAIL_OPENED'],

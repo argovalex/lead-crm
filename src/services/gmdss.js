@@ -80,4 +80,22 @@ function merge(tpl, lead) {
   return { text: out, unknown: [...unknown] };
 }
 
-module.exports = { VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+// Resend webhook events for emails sent from the GMDSS page. Returns true when the event belonged to a GMDSS lead.
+async function handleGmdssEvent(prisma, event, now = new Date()) {
+  const d = event.data || {};
+  if (!d.email_id) return false;
+  const l = await prisma.gmdssLead.findUnique({ where: { providerId: d.email_id } });
+  if (!l) return false;
+  const data = {};
+  if (event.type === 'email.delivered') data.deliveredAt = l.deliveredAt || now;
+  else if (event.type === 'email.opened') { data.openedAt = l.openedAt || now; data.openCount = { increment: 1 }; }
+  else if (event.type === 'email.clicked') {
+    data.clickedAt = l.clickedAt || now; data.clickCount = { increment: 1 };
+    if (d.click && d.click.link) data.lastClickLink = String(d.click.link).slice(0, 500);
+  } else if (event.type === 'email.bounced') { data.bouncedAt = now; data.emailStatus = 'bounced'; }
+  else return true;
+  await prisma.gmdssLead.update({ where: { id: l.id }, data });
+  return true;
+}
+
+module.exports = { handleGmdssEvent, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
