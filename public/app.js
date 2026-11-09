@@ -141,6 +141,24 @@ async function renderLeads() {
   }));
 }
 
+// Multi-select dropdown: <details class="ms">; .value is the checked values joined by commas.
+function msInit(sel) {
+  const el = $(sel);
+  Object.defineProperty(el, 'value', { get: () => [...el.querySelectorAll('input:checked')].map((c) => c.value).join(','), set: () => {} });
+  el.addEventListener('change', () => {
+    const n = el.querySelectorAll('input:checked').length;
+    el.querySelector('summary').textContent = n ? `${el.dataset.all.replace(/^כל /, '')} (${n})` : el.dataset.all;
+    el.classList.toggle('on', n > 0);
+  });
+}
+function fillMs(sel, items) {
+  const el = $(sel);
+  const cur = new Set(el.value.split(',').filter(Boolean));
+  el.querySelector('.ms-list').innerHTML = items.map((i) => `<label><input type="checkbox" value="${esc(i)}" ${cur.has(i) ? 'checked' : ''}> ${esc(i)}</label>`).join('') || '<span class="muted">אין ערכים</span>';
+}
+['#f-tag', '#f-segment', '#f-country'].forEach(msInit);
+document.addEventListener('click', (e) => document.querySelectorAll('details.ms[open]').forEach((d) => { if (!d.contains(e.target)) d.removeAttribute('open'); }));
+
 async function loadMeta() {
   meta = await api('/leads/meta');
   const fill = (sel, items, label = (x) => x) => {
@@ -149,10 +167,10 @@ async function loadMeta() {
     $(sel).value = cur;
   };
   fill('#f-stage', STAGES, (s) => STAGE_LABELS[s]);
-  fill('#f-tag', meta.tags);
+  fillMs('#f-tag', meta.tags);
   fill('#f-source', meta.sources);
-  fill('#f-country', meta.countries || []);
-  fill('#f-segment', meta.segments || []);
+  fillMs('#f-country', meta.countries || []);
+  fillMs('#f-segment', meta.segments || []);
   sequences = await api('/sequences');
   fill('#bulk-seq', sequences.map((s) => String(s.id)), (id) => sequences.find((s) => String(s.id) === id).name);
 }

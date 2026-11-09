@@ -43,11 +43,12 @@ router.get('/leads', wrap(async (req, res) => {
     if (!types) return res.status(400).json({ error: 'invalid_activity' });
     where.activities = activity === 'none_mail' ? { none: { type: { in: types } } } : { some: { type: { in: types } } };
   }
+  const list = (v) => String(v).split(',').map((x) => x.trim()).filter(Boolean);
   if (priority) where.priority = priority;
-  if (country) where.country = country;
-  if (segment) where.segment = segment;
+  if (country) where.country = { in: list(country) };
+  if (segment) where.segment = { in: list(segment) };
   if (stage) where.stage = stage;
-  if (tag) where.tags = { has: tag };
+  if (tag) where.tags = { hasSome: list(tag) };
   if (source) where.source = source;
   if (stale === 'true') where.stale = true;
   if (inactiveDays) where.lastActivityAt = { lt: new Date(Date.now() - Number(inactiveDays) * email.DAY) };
