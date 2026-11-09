@@ -99,6 +99,8 @@ async function logInteraction(leadId, input, db = prisma) {
   if (Number.isNaN(at.getTime())) throw Object.assign(new Error('invalid_date'), { status: 400 });
   const data = { subject: input.subject || null, body: input.body || null, manual: true, ...(input.messageId ? { messageId: input.messageId } : {}) };
   await db.activity.create({ data: { leadId, type: spec.act, data, createdAt: at } });
+  // Backfill of an older mail (import): keep it on the timeline only, do not touch stage or reminders.
+  if (input.backfill && lead.lastActivityAt > at) return lead;
   const upd = { lastActivityAt: lead.lastActivityAt > at ? lead.lastActivityAt : at, stale: false };
   if (spec.dir === 'in') {
     upd.replied = true;

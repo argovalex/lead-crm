@@ -60,7 +60,7 @@ async function importSent(files, { source = 'manual outreach' } = {}) {
           }
           const out = await leads.logInteractionByEmail({
             email: r.email, name: r.name, kind: 'EMAIL_OUT', at: m.date ? m.date.toISOString() : undefined,
-            subject: m.subject || '', body, messageId, source,
+            subject: m.subject || '', body, messageId, source, backfill: true,
           });
           res.logged += 1;
           if (out.created) res.created += 1;
