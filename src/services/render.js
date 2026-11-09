@@ -20,7 +20,7 @@ function renderRich(text) {
     const raw = unesc(u);
     const id = ytId(raw);
     if (!id) return keep(`<a href="${u}" style="color:#1f6f54">${u}</a>`);
-    return keep(`<a href="${u}" style="display:inline-block;margin:6px 0;text-decoration:none"><img src="https://img.youtube.com/vi/${id}/hqdefault.jpg" width="480" alt="&#9654; Watch the video" style="max-width:100%;height:auto;border:0;border-radius:8px;display:block"></a>`);
+    return keep(`<a href="${u}" style="display:inline-block;margin:6px 0;text-decoration:none"><img src="https://img.youtube.com/vi/${id}/hqdefault.jpg" width="240" alt="&#9654; Watch the video" style="max-width:100%;height:auto;border:0;border-radius:8px;display:block"></a>`);
   });
   h = h.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, u) => keep(`<a href="${u}" style="color:#1f6f54">${t}</a>`));
   h = h.replace(/(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g, (u) => `<a href="${u}" style="color:#1f6f54">${u}</a>`);
