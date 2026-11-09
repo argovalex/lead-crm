@@ -142,7 +142,8 @@ More details: {{Website}}
 Best regards,
 Alex`;
 
-function openTemplates(selId) {
+async function openTemplates(selId) {
+  try { templates = await api('/templates'); } catch (e) { /* keep cached list */ } // never edit a stale copy
   let cur = templates.find((t) => t.id === selId) || templates[0] || null; // open on a saved template, not a blank form
   const draw = () => {
     dlgOpen(`<h3 style="margin-top:0">Email templates</h3>
