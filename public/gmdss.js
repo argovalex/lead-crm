@@ -4,16 +4,15 @@ let leads = [];
 let templates = [];
 let variables = [];
 let emailConfigured = true;
-let sortKey = 'id', sortDir = 1;
+let sortKey = 'priority', sortDir = 1;
 const selected = new Set();
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const COLS = [
-  ['organization', 'Organization'], ['country', 'Country'], ['segment', 'Segment'], ['productFit', 'Product Fit'],
-  ['whyTheydBuy', "Why They'd Buy"], ['website', 'Website'], ['email', 'Email'], ['phone', 'Phone'], ['priority', 'Priority'],
-  ['template', 'Template'], ['emailStatus', 'Email Status'], ['engagement', 'Delivered / Opened / Clicked'], ['lastEmailedAt', 'Last Emailed'], ['followUpAt', 'Follow-up'], ['id', 'ID'],
+  ['organization', 'Organization'], ['country', 'Country'], ['segment', 'Segment'], ['productFit', 'Fit'],
+  ['email', 'Contact'], ['emailStatus', 'Status'], ['engagement', 'Delivered · Opened · Clicked'], ['lastEmailedAt', 'Last Emailed'], ['followUpAt', 'Follow-up'],
 ];
-const LTR = new Set(['website', 'email', 'phone']);
+const LTR = new Set();
 const TEXT = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
 const fmt = (d) => (d ? new Date(d).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : '');
 const engScore = (l) => (l.clickedAt ? 3 : l.openedAt ? 2 : l.deliveredAt ? 1 : 0);
@@ -52,7 +51,7 @@ function filtered() {
     if (eng === 'followup' && !(l.followUpAt && new Date(l.followUpAt) <= new Date())) return false;
     return !q || TEXT.some((k) => (l[k] || '').toLowerCase().includes(q));
   });
-  const val = (l) => (sortKey === 'template' ? l.template?.name : sortKey === 'engagement' ? engScore(l) : l[sortKey]);
+  const val = (l) => (sortKey === 'engagement' ? engScore(l) : l[sortKey]);
   return rows.sort((a, b) => {
     const x = val(a) ?? '', y = val(b) ?? '';
     if (x === y) return 0;
@@ -63,19 +62,28 @@ function filtered() {
 }
 
 function engagement(l) {
-  const dot = (on, ico, title) => `<span class="eg ${on ? 'on' : ''}" title="${esc(title)}">${ico}</span>`;
-  return `<span class="egs">${dot(l.deliveredAt, '✓', l.deliveredAt ? `Delivered ${fmt(l.deliveredAt)}` : 'Not delivered yet')}`
-    + `${dot(l.openedAt, '👁', l.openedAt ? `Opened ${fmt(l.openedAt)} (${l.openCount}x)` : 'Not opened')}`
-    + `${dot(l.clickedAt, '↗', l.clickedAt ? `Clicked ${fmt(l.clickedAt)} (${l.clickCount}x) ${l.lastClickLink || ''}` : 'No link clicked')}</span>`
-    + `${l.openCount > 1 ? ` <span class="muted">${l.openCount}</span>` : ''}`;
+  const pill = (on, ico, label, title) => `<span class="eg ${on ? 'on' : ''}" title="${esc(title)}">${ico} ${label}</span>`;
+  return `<span class="egs">${pill(l.deliveredAt, '✓', 'נמסר', l.deliveredAt ? `Delivered ${fmt(l.deliveredAt)}` : 'Not delivered yet')}`
+    + `${pill(l.openedAt, '👁', l.openCount > 1 ? `נפתח ${l.openCount}x` : 'נפתח', l.openedAt ? `Opened ${fmt(l.openedAt)} (${l.openCount}x)` : 'Not opened')}`
+    + `${pill(l.clickedAt, '↗', l.clickCount > 1 ? `הקלקה ${l.clickCount}x` : 'הקלקה', l.clickedAt ? `Clicked ${fmt(l.clickedAt)} (${l.clickCount}x) ${l.lastClickLink || ''}` : 'No link clicked')}</span>`;
+}
+
+function contact(l) {
+  const out = [];
+  if (l.email) out.push(`<a href="mailto:${esc(l.email)}">${esc(l.email)}</a>`);
+  if (l.phone) out.push(`<a href="tel:${esc(l.phone.replace(/[^\d+]/g, ''))}">${esc(l.phone)}</a>`);
+  if (l.website) out.push(`<a href="${esc(l.website)}" target="_blank" rel="noopener noreferrer">${esc(l.website.replace(/^https?:\/\/(www\.)?/, ''))}</a>`);
+  return out.length ? `<div class="ct">${out.join('')}</div>` : '<span class="muted-cell">—</span>';
 }
 
 function cell(l, k) {
   const v = l[k];
+  if (k === 'email') return contact(l);
+  if (k === 'email') return contact(l);
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
-  if (k === 'organization') return `<a href="#" data-card="${l.id}" style="font-weight:600" onclick="return false">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="Replied">↩</span>' : ''}`;
+  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}" onclick="return false">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="Replied">↩</span>' : ''}</div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
   if (k === 'followUpAt') { const due = new Date(v) <= new Date(); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'Follow-up due' : 'Follow-up'}">${esc(new Date(v).toISOString().slice(0, 10))}</span>`; }
   if (k === 'priority') return `<span class="pb ${esc(v)}">${esc(v)}</span>`;
   if (k === 'website') return `<a href="${esc(v)}" target="_blank" rel="noopener noreferrer">${esc(v.replace(/^https?:\/\/(www\.)?/, ''))}</a>`;
@@ -88,13 +96,12 @@ function cell(l, k) {
 
 function render() {
   const rows = filtered();
-  $('#tbl thead').innerHTML = `<tr><th><input type="checkbox" id="chk-page" title="בחר את המוצגים"></th><th></th>${COLS.map(([k, h]) =>
-    `<th data-k="${k}" class="${LTR.has(k) ? 'ltr' : ''}">${h}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>`;
-  $('#tbl tbody').innerHTML = rows.map((l) => `<tr>
+  $('#tbl thead').innerHTML = `<tr><th><input type="checkbox" id="chk-page" title="בחר את המוצגים"></th>${COLS.map(([k, h]) =>
+    `<th data-k="${k}" title="${k === 'engagement' ? 'נמסר = המייל הגיע לתיבה. נפתח = הנמען פתח אותו. הקלקה = לחץ על קישור או סרטון' : ''}">${h}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>`;
+  $('#tbl tbody').innerHTML = rows.map((l) => `<tr class="p-${esc(l.priority || '')}">
     <td><input type="checkbox" class="rc" data-id="${l.id}" ${selected.has(l.id) ? 'checked' : ''} ${l.email ? '' : 'disabled title="אין אימייל"'}></td>
-    <td><button class="btn sm" data-edit="${l.id}" title="ערוך ליד">✎</button></td>
-    ${COLS.map(([k]) => `<td class="${LTR.has(k) ? 'ltr' : ''} ${k === 'whyTheydBuy' ? 'wide' : ''}">${cell(l, k)}</td>`).join('')}</tr>`).join('')
-    || `<tr><td colspan="${COLS.length + 2}" class="muted">אין תוצאות</td></tr>`;
+    ${COLS.map(([k]) => `<td>${cell(l, k)}</td>`).join('')}</tr>`).join('')
+    || `<tr><td colspan="${COLS.length + 1}" class="muted">אין תוצאות</td></tr>`;
   $('#count').textContent = `${rows.length} / ${leads.length}`;
   $('#sel-n').textContent = selected.size;
   $('#send').disabled = !selected.size;

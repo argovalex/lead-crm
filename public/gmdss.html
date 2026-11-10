@@ -11,16 +11,20 @@ body.embed .top{display:none}
 body.embed main{padding:8px 10px 20px}
 body.embed .gtable-wrap{max-height:70vh}
 table.g{border-collapse:collapse;width:100%;font-size:13px}
-table.g th,table.g td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
-table.g th{position:sticky;top:0;background:#eef0eb;cursor:pointer;white-space:nowrap;user-select:none}
-table.g td.ltr,table.g th.ltr{direction:ltr;text-align:left}
-table.g td.wide{min-width:220px}
-.pb{display:inline-block;min-width:24px;text-align:center;border-radius:12px;padding:1px 9px;color:#fff;font-weight:700}
-.pb.A{background:#b23a3a}.pb.B{background:#c28a1d}.pb.C{background:#7c8a83}
+table.g th,table.g td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
+table.g th{position:sticky;top:0;background:#eef0eb;cursor:pointer;white-space:nowrap;user-select:none;z-index:1}
+table.g tr.p-A td:first-child{box-shadow:inset 5px 0 0 #b23a3a}
+table.g tr.p-B td:first-child{box-shadow:inset 5px 0 0 #c28a1d}
+table.g tr.p-C td:first-child{box-shadow:inset 5px 0 0 #aab3ad}
+table.g tr.p-A{background:#fdf3f3}table.g tr.p-B{background:#fdf8ec}
+.org{display:flex;align-items:center;gap:6px;font-weight:600}
+.org .ed{padding:0 6px;line-height:20px;flex:none}
+.why{color:#6b756e;font-size:12px;margin-top:2px;max-width:260px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ct{display:flex;flex-direction:column;gap:1px;direction:ltr;text-align:left;font-size:12px}
 .st{font-size:12px;border-radius:6px;padding:1px 7px;background:#e8eae5;white-space:nowrap}
 .st.sent{background:#d6efe1;color:#1f6f54}.st.failed,.st.bounced{background:#f5d9d9;color:var(--danger)}.st.queued{background:#f6e8cf;color:var(--warn)}
-.egs{display:inline-flex;gap:4px;white-space:nowrap}
-.eg{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#eceee9;color:#b3b9b4;font-size:12px}
+.egs{display:inline-flex;gap:3px;white-space:nowrap}
+.eg{display:inline-block;border-radius:10px;padding:1px 7px;background:#eceee9;color:#a3aaa5;font-size:11px}
 .eg.on{background:#1f6f54;color:#fff}
 .muted-cell{color:#b3b9b4}
 .vars{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
