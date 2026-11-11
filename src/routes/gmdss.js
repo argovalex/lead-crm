@@ -149,9 +149,10 @@ router.post('/leads/:id/remind', wrap(async (req, res) => {
   if (r.failed) throw bad(r.error, 502);
   res.json(r);
 }));
+router.get('/leads/:id/code/preview', wrap(async (req, res) => { res.json(await reminders.previewCode(Number(req.params.id), { code: req.query.code })); }));
 router.post('/leads/:id/code', wrap(async (req, res) => {
   if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
-  res.json(await reminders.sendCode(Number(req.params.id), { code: req.body && req.body.code, note: req.body && req.body.note }));
+  res.json(await reminders.sendCode(Number(req.params.id), { code: req.body && req.body.code, note: req.body && req.body.note, edit: req.body && req.body.subject ? { subject: req.body.subject, body: req.body.body } : null }));
 }));
 
 // Customer card: activity timeline + manual notes.

@@ -427,10 +427,23 @@ async function openCard(id) {
     };
   };
   $('#cd-code').onclick = async () => {
-    const code = prompt('קוד גישה לשליחה (השאר ריק ליצירת קוד אוטומטי):', l.accessCode || '');
-    if (code === null) return;
-    if (!confirm(`לשלוח קוד גישה ל-${l.email}?`)) return;
-    try { const r = await api(`/leads/${id}/code`, { method: 'POST', body: { code } }); toast(`הקוד ${r.code} נשלח`); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+    let pv;
+    try { pv = await api(`/leads/${id}/code/preview`); } catch (e) { toast(e.message, true); return; }
+    let cur = pv.code;
+    dlgOpen(`<h3 style="margin-top:0">🔑 קוד גישה · תצוגה מקדימה</h3>
+      <div class="muted" style="margin-bottom:8px">אל: <span dir="ltr">${esc(pv.to)}</span> · אפשר לערוך את הקוד, הנושא והתוכן לפני שליחה. החתימה נוספת אוטומטית.</div>
+      <label>קוד גישה<input id="cp-code" dir="ltr" style="width:100%" value="${esc(pv.code)}"></label>
+      <label style="margin-top:8px">נושא<input id="cp-subject" dir="ltr" style="width:100%" value="${esc(pv.subject)}"></label>
+      <label style="margin-top:8px">תוכן<textarea id="cp-body" rows="12" dir="ltr" style="width:100%">${esc(pv.body)}</textarea></label>
+      <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="cp-send">שלח עכשיו</button><button class="btn" id="cp-back">חזרה לכרטיס</button></div>`);
+    $('#cp-code').oninput = () => { const n = $('#cp-code').value.trim(); if (n && cur) $('#cp-body').value = $('#cp-body').value.split(cur).join(n); if (n) cur = n; };
+    $('#cp-back').onclick = () => openCard(id);
+    $('#cp-send').onclick = async () => {
+      const code = $('#cp-code').value.trim();
+      if (!code) { toast('חסר קוד גישה', true); return; }
+      if (!confirm(`לשלוח קוד גישה ל-${pv.to}?`)) return;
+      try { const r = await api(`/leads/${id}/code`, { method: 'POST', body: { code, subject: $('#cp-subject').value, body: $('#cp-body').value } }); toast(`הקוד ${r.code} נשלח`); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+    };
   };
   $('#cd-suggest').onclick = async () => {
     const b = $('#cd-suggest'); b.disabled = true; $('#cd-rhint').textContent = 'מנסח...';

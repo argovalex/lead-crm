@@ -189,17 +189,40 @@ function newCode() {
   for (let i = 0; i < 8; i += 1) s += a[Math.floor(Math.random() * a.length)];
   return `${s.slice(0, 4)}-${s.slice(4)}`;
 }
-async function sendCode(id, { code, note } = {}) {
+function codeEmail(l, c, extra) {
+  const body = `Hi,
+
+Thank you for your interest. Here is your personal access code to test the GMDSS course and simulator in depth:
+
+${c}
+${extra ? `
+${extra}
+` : ''}
+Take your time exploring, and reply with any questions or feedback. I am also happy to walk you through it on a short call.
+
+Best regards`;
+  return { subject: `Your GMDSS access code for ${l.organization}`, body };
+}
+// Read-only: the access-code email as it would go out now, for the card's preview dialog.
+async function previewCode(id, { code } = {}) {
+  const l = await prisma.gmdssLead.findUnique({ where: { id } });
+  if (!l) throw Object.assign(new Error('not_found'), { status: 404 });
+  if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
+  const c = String(code || '').trim() || l.accessCode || newCode();
+  return { to: l.email, code: c, ...codeEmail(l, c, '') };
+}
+async function sendCode(id, { code, note, edit = null } = {}) {
   const l = await prisma.gmdssLead.findUnique({ where: { id } });
   if (!l) throw Object.assign(new Error('not_found'), { status: 404 });
   if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
   const c = String(code || '').trim() || newCode();
   const sig = (await settings.getAll()).signatureHtml || '';
-  const extra = String(note || '').trim();
-  const body = `Hi,\n\nThank you for your interest. Here is your personal access code to test the GMDSS course and simulator in depth:\n\n${c}\n${extra ? `\n${extra}\n` : ''}\nTake your time exploring, and reply with any questions or feedback. I am also happy to walk you through it on a short call.\n\nBest regards`;
-  const subject = `Your GMDSS access code for ${l.organization}`;
+  let { subject, body } = codeEmail(l, c, String(note || '').trim());
+  if (edit && String(edit.subject || '').trim() && String(edit.body || '').trim()) { subject = String(edit.subject).trim(); body = String(edit.body); }
   const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(body)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}</div>`;
-  const text = `${renderPlain(body)}${sig ? `\n\n${htmlToText(sig)}` : ''}`;
+  const text = `${renderPlain(body)}${sig ? `
+
+${htmlToText(sig)}` : ''}`;
   const { providerId } = await getProvider().send({ to: l.email, subject, html, text, idempotencyKey: `gmdss-code:${id}:${Date.now()}` });
   const now = new Date();
   await prisma.gmdssLead.update({ where: { id }, data: { accessCode: c, codeSentAt: now, providerId, followUpAt: new Date(+now + 3 * DAY) } });
@@ -207,4 +230,4 @@ async function sendCode(id, { code, note } = {}) {
   return { code: c, sentTo: l.email };
 }
 
-module.exports = { dueInfo, segmentOf, inSendWindow, isEnabled, setEnabled, dueLeads, sendReminder, previewReminder, runDue, sendCode, newCode, getTemplates, saveTemplates, resetTemplates, TEMPLATES, WAIT_DAYS, MAX_REMINDERS, DAILY_CAP };
+module.exports = { dueInfo, segmentOf, inSendWindow, isEnabled, setEnabled, dueLeads, sendReminder, previewReminder, previewCode, runDue, sendCode, newCode, getTemplates, saveTemplates, resetTemplates, TEMPLATES, WAIT_DAYS, MAX_REMINDERS, DAILY_CAP };
