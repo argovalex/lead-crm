@@ -64,8 +64,40 @@ async function setEnabled(on) {
   await prisma.setting.upsert({ where: { key: SETTING_KEY }, create: { key: SETTING_KEY, value }, update: { value } });
 }
 
-function compose(l, segment, n, sig) {
-  const t = TEMPLATES[segment][n - 1];
+// Saved wording overrides the defaults per segment and step; anything not saved falls back to the default.
+const TPL_KEY = 'gmdssReminderTemplates';
+const SEGMENTS = ['hot', 'warm', 'cold'];
+async function getTemplates() {
+  const r = await prisma.setting.findUnique({ where: { key: TPL_KEY } });
+  let saved = {};
+  try { saved = r ? JSON.parse(r.value) : {}; } catch { saved = {}; }
+  const out = {};
+  for (const s of SEGMENTS) {
+    out[s] = TEMPLATES[s].map((d, i) => {
+      const o = saved[s] && saved[s][i];
+      return o && String(o.subject || '').trim() && String(o.body || '').trim() ? { subject: String(o.subject).trim(), body: String(o.body).trim() } : d;
+    });
+  }
+  return out;
+}
+async function saveTemplates(input) {
+  const out = {};
+  for (const s of SEGMENTS) {
+    const arr = input && input[s];
+    if (!Array.isArray(arr) || arr.length !== MAX_REMINDERS) throw Object.assign(new Error('templates_incomplete'), { status: 400 });
+    out[s] = arr.map((t) => {
+      const subject = String((t && t.subject) || '').trim(); const body = String((t && t.body) || '').trim();
+      if (!subject || !body) throw Object.assign(new Error('subject_and_body_required'), { status: 400 });
+      return { subject, body };
+    });
+  }
+  await prisma.setting.upsert({ where: { key: TPL_KEY }, create: { key: TPL_KEY, value: JSON.stringify(out) }, update: { value: JSON.stringify(out) } });
+  return getTemplates();
+}
+async function resetTemplates() { await prisma.setting.deleteMany({ where: { key: TPL_KEY } }); return getTemplates(); }
+
+function compose(l, segment, n, sig, tpls) {
+  const t = (tpls || TEMPLATES)[segment][n - 1];
   const subject = merge(t.subject, l).text;
   const body = merge(t.body, l).text;
   const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(body)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}`
@@ -98,7 +130,7 @@ async function sendReminder(id, { force = false, now = new Date() } = {}) {
   const claim = await prisma.gmdssLead.updateMany({ where: { id, reminderCount: l.reminderCount, repliedAt: null }, data: { reminderCount: { increment: 1 }, lastReminderAt: now } });
   if (!claim.count) return { skipped: 'claimed' };
   const sig = (await settings.getAll()).signatureHtml || '';
-  const m = compose(l, d.segment, d.n, sig);
+  const m = compose(l, d.segment, d.n, sig, await getTemplates());
   try {
     const { providerId } = await getProvider().send({ to: l.email, subject: m.subject, html: m.html, text: m.text, idempotencyKey: `gmdss-rem:${id}:${d.n}` });
     // New provider id so opens/clicks of the reminder land on this lead; counters stay cumulative.
@@ -156,4 +188,4 @@ async function sendCode(id, { code, note } = {}) {
   return { code: c, sentTo: l.email };
 }
 
-module.exports = { dueInfo, segmentOf, inSendWindow, isEnabled, setEnabled, dueLeads, sendReminder, runDue, sendCode, newCode, TEMPLATES, WAIT_DAYS, MAX_REMINDERS, DAILY_CAP };
+module.exports = { dueInfo, segmentOf, inSendWindow, isEnabled, setEnabled, dueLeads, sendReminder, runDue, sendCode, newCode, getTemplates, saveTemplates, resetTemplates, TEMPLATES, WAIT_DAYS, MAX_REMINDERS, DAILY_CAP };

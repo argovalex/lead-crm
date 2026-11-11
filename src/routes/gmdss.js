@@ -131,6 +131,9 @@ router.get('/reminders', wrap(async (_req, res) => {
     due: due.map(({ l, d }) => ({ id: l.id, organization: l.organization, email: l.email, segment: d.segment, n: d.n, openCount: l.openCount, clickCount: l.clickCount, dueAt: d.dueAt })),
   });
 }));
+router.get('/reminders/templates', wrap(async (_req, res) => { res.json(await reminders.getTemplates()); }));
+router.put('/reminders/templates', wrap(async (req, res) => { res.json(await reminders.saveTemplates(req.body)); }));
+router.delete('/reminders/templates', wrap(async (_req, res) => { res.json(await reminders.resetTemplates()); }));
 router.put('/reminders', wrap(async (req, res) => {
   await reminders.setEnabled(!!(req.body && req.body.enabled));
   res.json({ enabled: await reminders.isEnabled() });

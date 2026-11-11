@@ -457,7 +457,8 @@ async function openReminders() {
     <div style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px">
       ${r.due.map((d) => `<div style="padding:6px 10px;border-bottom:1px solid var(--line);font-size:13px"><b>${esc(d.organization)}</b> <span class="muted" dir="ltr">${esc(d.email)}</span> · ${SEG[d.segment]} · תזכורת ${d.n}/${r.max} · פתיחות ${d.openCount}, הקלקות ${d.clickCount}</div>`).join('') || '<div class="muted" style="padding:10px">אין כרגע לידים שהגיע זמנם</div>'}
     </div>
-    <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="rm-run" ${r.due.length && r.emailConfigured ? '' : 'disabled'}>שלח את כל ${r.due.length} עכשיו</button></div>`);
+    <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="rm-run" ${r.due.length && r.emailConfigured ? '' : 'disabled'}>שלח את כל ${r.due.length} עכשיו</button> <button class="btn" id="rm-tpl">✎ עריכת נוסחים</button></div>`);
+  $('#rm-tpl').onclick = openReminderTemplates;
   $('#rm-close').onclick = dlgClose;
   $('#rm-on').onchange = async (e) => {
     try { await api('/reminders', { method: 'PUT', body: { enabled: e.target.checked } }); toast(e.target.checked ? 'התזכורות האוטומטיות הופעלו' : 'התזכורות האוטומטיות כובו'); } catch (err) { toast(err.message, true); e.target.checked = !e.target.checked; }
@@ -468,6 +469,32 @@ async function openReminders() {
   };
 }
 $('#rem').onclick = openReminders;
+
+async function openReminderTemplates() {
+  let t;
+  try { t = await api('/reminders/templates'); } catch (e) { toast(e.message, true); return; }
+  const SEGS = [['hot', 'הקליק על קישור'], ['warm', 'פתח בלי קליק'], ['cold', 'לא פתח']];
+  const vars = '{{Organization}} {{Country}} {{Segment}} {{Website}}';
+  dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start"><h3 style="margin:0">נוסחי תזכורות</h3><button class="btn sm" id="rt-close" aria-label="סגירה">✕</button></div>
+    <p class="muted" style="font-size:13px">שלוש תזכורות לכל קבוצה. משתנים: <span dir="ltr">${vars}</span>. החתימה והערת ההסרה נוספות אוטומטית.</p>
+    <select id="rt-seg">${SEGS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>
+    <div id="rt-list"></div>
+    <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="rt-save">שמירה</button> <button class="btn" id="rt-reset">איפוס לברירת מחדל</button> <button class="btn ghost" id="rt-back">חזרה</button></div>`);
+  const grab = () => { const seg = cur; document.querySelectorAll('#rt-list .rt-i').forEach((el, i) => { t[seg][i] = { subject: el.querySelector('.rt-s').value, body: el.querySelector('.rt-b').value }; }); };
+  const draw = () => {
+    const seg = $('#rt-seg').value;
+    $('#rt-list').innerHTML = t[seg].map((x, i) => `<div class="rt-i" style="margin-top:8px"><b>תזכורת ${i + 1}</b>
+      <input class="rt-s" dir="ltr" style="width:100%;margin:4px 0" value="${esc(x.subject)}">
+      <textarea class="rt-b" dir="ltr" rows="7" style="width:100%">${esc(x.body)}</textarea></div>`).join('');
+  };
+  let cur = $('#rt-seg').value;
+  draw();
+  $('#rt-seg').onchange = () => { grab(); cur = $('#rt-seg').value; draw(); };
+  $('#rt-close').onclick = dlgClose;
+  $('#rt-back').onclick = openReminders;
+  $('#rt-save').onclick = async () => { grab(); try { t = await api('/reminders/templates', { method: 'PUT', body: t }); toast('הנוסחים נשמרו'); } catch (e) { toast(e.message, true); } };
+  $('#rt-reset').onclick = async () => { if (!confirm('לאפס את כל הנוסחים לברירת המחדל?')) return; try { t = await api('/reminders/templates', { method: 'DELETE' }); draw(); toast('אופס'); } catch (e) { toast(e.message, true); } };
+}
 
 // ---------- Edit a lead ----------
 const EDIT_FIELDS = [['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמת מוצר (Course / Simulator / Both)'],
