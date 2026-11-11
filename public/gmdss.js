@@ -413,8 +413,18 @@ async function openCard(id) {
   $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);
   $('#cd-fu-clear').onclick = () => saveFu(null);
   $('#cd-remind').onclick = async () => {
-    if (!confirm(`לשלוח תזכורת ל-${l.email}?`)) return;
-    try { const r = await api(`/leads/${id}/remind`, { method: 'POST', body: {} }); toast(`תזכורת ${r.n} נשלחה`); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+    let pv;
+    try { pv = await api(`/leads/${id}/remind/preview`); } catch (e) { toast(e.message, true); return; }
+    dlgOpen(`<h3 style="margin-top:0">🔔 תזכורת ${pv.n} · תצוגה מקדימה</h3>
+      <div class="muted" style="margin-bottom:8px">אל: <span dir="ltr">${esc(pv.to)}</span> · הנוסח נבחר לפי פתיחות והקלקות (${esc(pv.segment)}). אפשר לערוך לפני שליחה, והחתימה נוספת אוטומטית.</div>
+      <label>נושא<input id="rp-subject" dir="ltr" style="width:100%" value="${esc(pv.subject)}"></label>
+      <label style="margin-top:8px">תוכן<textarea id="rp-body" rows="12" dir="ltr" style="width:100%">${esc(pv.body)}</textarea></label>
+      <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="rp-send">שלח עכשיו</button><button class="btn" id="rp-back">חזרה לכרטיס</button></div>`);
+    $('#rp-back').onclick = () => openCard(id);
+    $('#rp-send').onclick = async () => {
+      if (!confirm(`לשלוח את התזכורת ל-${pv.to}?`)) return;
+      try { const r = await api(`/leads/${id}/remind`, { method: 'POST', body: { subject: $('#rp-subject').value, body: $('#rp-body').value } }); toast(`תזכורת ${r.n} נשלחה`); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+    };
   };
   $('#cd-code').onclick = async () => {
     const code = prompt('קוד גישה לשליחה (השאר ריק ליצירת קוד אוטומטי):', l.accessCode || '');

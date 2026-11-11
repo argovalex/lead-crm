@@ -115,7 +115,22 @@ async function dueLeads(now = new Date()) {
 }
 
 // Sends one reminder. `force` skips the waiting period (manual button). Returns { sent } | { skipped } | { failed }.
-async function sendReminder(id, { force = false, now = new Date() } = {}) {
+// Read-only: the exact email a forced reminder would send now (merged template, no signature), for the card's preview dialog.
+async function previewReminder(id) {
+  const l = await prisma.gmdssLead.findUnique({ where: { id } });
+  if (!l) throw Object.assign(new Error('not_found'), { status: 404 });
+  const d = dueInfo(l, new Date(8.64e15));
+  if (!d) {
+    if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
+    if (l.repliedAt) throw Object.assign(new Error('lead_already_replied'), { status: 409 });
+    if (l.reminderCount >= MAX_REMINDERS) throw Object.assign(new Error('max_reminders_reached'), { status: 409 });
+    throw Object.assign(new Error('lead_not_mailed_yet'), { status: 409 });
+  }
+  const t = (await getTemplates())[d.segment][d.n - 1];
+  return { to: l.email, n: d.n, segment: d.segment, subject: merge(t.subject, l).text, body: merge(t.body, l).text };
+}
+
+async function sendReminder(id, { force = false, now = new Date(), edit = null } = {}) {
   const l = await prisma.gmdssLead.findUnique({ where: { id } });
   if (!l) throw Object.assign(new Error('not_found'), { status: 404 });
   const d = dueInfo(l, force ? new Date(8.64e15) : now);
@@ -130,7 +145,11 @@ async function sendReminder(id, { force = false, now = new Date() } = {}) {
   const claim = await prisma.gmdssLead.updateMany({ where: { id, reminderCount: l.reminderCount, repliedAt: null }, data: { reminderCount: { increment: 1 }, lastReminderAt: now } });
   if (!claim.count) return { skipped: 'claimed' };
   const sig = (await settings.getAll()).signatureHtml || '';
-  const m = compose(l, d.segment, d.n, sig, await getTemplates());
+  let tpls = await getTemplates();
+  if (edit && String(edit.subject || '').trim() && String(edit.body || '').trim()) {
+    tpls = { ...tpls, [d.segment]: tpls[d.segment].map((t, i) => (i === d.n - 1 ? { subject: String(edit.subject).trim(), body: String(edit.body) } : t)) };
+  }
+  const m = compose(l, d.segment, d.n, sig, tpls);
   try {
     const { providerId } = await getProvider().send({ to: l.email, subject: m.subject, html: m.html, text: m.text, idempotencyKey: `gmdss-rem:${id}:${d.n}` });
     // New provider id so opens/clicks of the reminder land on this lead; counters stay cumulative.
@@ -188,4 +207,4 @@ async function sendCode(id, { code, note } = {}) {
   return { code: c, sentTo: l.email };
 }
 
-module.exports = { dueInfo, segmentOf, inSendWindow, isEnabled, setEnabled, dueLeads, sendReminder, runDue, sendCode, newCode, getTemplates, saveTemplates, resetTemplates, TEMPLATES, WAIT_DAYS, MAX_REMINDERS, DAILY_CAP };
+module.exports = { dueInfo, segmentOf, inSendWindow, isEnabled, setEnabled, dueLeads, sendReminder, previewReminder, runDue, sendCode, newCode, getTemplates, saveTemplates, resetTemplates, TEMPLATES, WAIT_DAYS, MAX_REMINDERS, DAILY_CAP };

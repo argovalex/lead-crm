@@ -142,9 +142,10 @@ router.post('/reminders/run', wrap(async (_req, res) => {
   if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
   res.json(await reminders.runDue(new Date(), { ignoreWindow: true }));
 }));
+router.get('/leads/:id/remind/preview', wrap(async (req, res) => { res.json(await reminders.previewReminder(Number(req.params.id))); }));
 router.post('/leads/:id/remind', wrap(async (req, res) => {
   if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
-  const r = await reminders.sendReminder(Number(req.params.id), { force: true });
+  const r = await reminders.sendReminder(Number(req.params.id), { force: true, edit: req.body && req.body.subject ? { subject: req.body.subject, body: req.body.body } : null });
   if (r.failed) throw bad(r.error, 502);
   res.json(r);
 }));
