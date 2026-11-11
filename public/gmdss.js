@@ -9,9 +9,26 @@ const selected = new Set();
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const COLS = [
-  ['organization', 'Organization'], ['country', 'Country'], ['segment', 'Segment'], ['productFit', 'Fit'],
-  ['email', 'Contact'], ['emailStatus', 'Status'], ['engagement', 'Delivered · Opened · Clicked'], ['lastEmailedAt', 'Last Emailed'], ['followUpAt', 'Follow-up'],
+  ['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמה'],
+  ['email', 'קשר'], ['emailStatus', 'סטטוס'], ['engagement', 'נמסר · נפתח · הקלקה'], ['lastEmailedAt', 'נשלח לאחרונה'], ['followUpAt', 'מעקב'],
 ];
+// Interface labels are Hebrew; lead data and everything that goes into an email stay as written.
+const STATUS = { not_sent: 'לא נשלח', queued: 'בתור', sent: 'נשלח', failed: 'נכשל', bounced: 'חזר' };
+const FIT = { Course: 'קורס', Simulator: 'סימולטור', Both: 'שניהם' };
+const dayHe = (d) => new Date(d).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' });
+const isDue = (l) => !!(l.followUpAt && new Date(l.followUpAt) <= new Date());
+// Email-status filter. The summary chips above the table use the same predicates.
+const ENG = {
+  sent: (l) => l.emailStatus === 'sent',
+  opened: (l) => !!l.openedAt,
+  clicked: (l) => !!l.clickedAt,
+  unopened: (l) => l.emailStatus === 'sent' && !l.openedAt,
+  failed: (l) => ['failed', 'bounced'].includes(l.emailStatus),
+  replied: (l) => !!l.repliedAt,
+  followup: isDue,
+};
+const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['followup', 'מעקב להיום']];
+const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template'];
 const LTR = new Set();
 const TEXT = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
 const fmt = (d) => (d ? new Date(d).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : '');
@@ -42,13 +59,7 @@ function filtered() {
     for (const k in f) if (f[k] && l[k] !== f[k]) return false;
     if (tpl === 'none' && l.templateId) return false;
     if (tpl && tpl !== 'none' && String(l.templateId) !== tpl) return false;
-    if (eng === 'sent' && l.emailStatus !== 'sent') return false;
-    if (eng === 'opened' && !l.openedAt) return false;
-    if (eng === 'clicked' && !l.clickedAt) return false;
-    if (eng === 'unopened' && !(l.emailStatus === 'sent' && !l.openedAt)) return false;
-    if (eng === 'failed' && !['failed', 'bounced'].includes(l.emailStatus)) return false;
-    if (eng === 'replied' && !l.repliedAt) return false;
-    if (eng === 'followup' && !(l.followUpAt && new Date(l.followUpAt) <= new Date())) return false;
+    if (eng && !ENG[eng](l)) return false;
     return !q || TEXT.some((k) => (l[k] || '').toLowerCase().includes(q));
   });
   const val = (l) => (sortKey === 'engagement' ? engScore(l) : l[sortKey]);
@@ -63,9 +74,9 @@ function filtered() {
 
 function engagement(l) {
   const pill = (on, ico, label, title) => `<span class="eg ${on ? 'on' : ''}" title="${esc(title)}">${ico} ${label}</span>`;
-  return `<span class="egs">${pill(l.deliveredAt, '✓', 'נמסר', l.deliveredAt ? `Delivered ${fmt(l.deliveredAt)}` : 'Not delivered yet')}`
-    + `${pill(l.openedAt, '👁', l.openCount > 1 ? `נפתח ${l.openCount}x` : 'נפתח', l.openedAt ? `Opened ${fmt(l.openedAt)} (${l.openCount}x)` : 'Not opened')}`
-    + `${pill(l.clickedAt, '↗', l.clickCount > 1 ? `הקלקה ${l.clickCount}x` : 'הקלקה', l.clickedAt ? `Clicked ${fmt(l.clickedAt)} (${l.clickCount}x) ${l.lastClickLink || ''}` : 'No link clicked')}</span>`;
+  return `<span class="egs">${pill(l.deliveredAt, '✓', 'נמסר', l.deliveredAt ? `נמסר ${fmt(l.deliveredAt)}` : 'עוד לא נמסר')}`
+    + `${pill(l.openedAt, '👁', l.openCount > 1 ? `נפתח ${l.openCount}x` : 'נפתח', l.openedAt ? `נפתח ${fmt(l.openedAt)} (${l.openCount}x)` : 'לא נפתח')}`
+    + `${pill(l.clickedAt, '↗', l.clickCount > 1 ? `הקלקה ${l.clickCount}x` : 'הקלקה', l.clickedAt ? `הקלקה ${fmt(l.clickedAt)} (${l.clickCount}x) ${l.lastClickLink || ''}` : 'אין הקלקה על קישור')}</span>`;
 }
 
 function contact(l) {
@@ -79,17 +90,17 @@ function contact(l) {
 function cell(l, k) {
   const v = l[k];
   if (k === 'email') return contact(l);
-  if (k === 'email') return contact(l);
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
-  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="Replied">↩</span>' : ''}</div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
-  if (k === 'followUpAt') { const due = new Date(v) <= new Date(); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'Follow-up due' : 'Follow-up'}">${esc(new Date(v).toISOString().slice(0, 10))}</span>`; }
+  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="השיב">↩</span>' : ''}</div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
+  if (k === 'followUpAt') { const due = isDue(l); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'הגיע מועד המעקב' : 'מעקב מתוכנן'}">${esc(dayHe(v))}</span>`; }
+  if (k === 'productFit') return esc(FIT[v] || v);
   if (k === 'priority') return `<span class="pb ${esc(v)}">${esc(v)}</span>`;
   if (k === 'website') return `<a href="${esc(v)}" target="_blank" rel="noopener noreferrer">${esc(v.replace(/^https?:\/\/(www\.)?/, ''))}</a>`;
   if (k === 'email') return `<a href="mailto:${esc(v)}">${esc(v)}</a>`;
   if (k === 'phone') return `<a href="tel:${esc(v.replace(/[^\d+]/g, ''))}">${esc(v)}</a>`;
-  if (k === 'emailStatus') return `<span class="st ${esc(v)}" ${l.lastError ? `title="${esc(l.lastError)}"` : ''}>${esc(v)}</span>`;
+  if (k === 'emailStatus') return `<span class="st ${esc(v)}" ${l.lastError ? `title="${esc(l.lastError)}"` : ''}>${esc(STATUS[v] || v)}</span>`;
   if (k === 'lastEmailedAt') return esc(fmt(v));
   return esc(v);
 }
@@ -102,21 +113,36 @@ function render() {
     <td><input type="checkbox" class="rc" data-id="${l.id}" ${selected.has(l.id) ? 'checked' : ''} ${l.email ? '' : 'disabled title="אין אימייל"'}></td>
     ${COLS.map(([k]) => `<td>${cell(l, k)}</td>`).join('')}</tr>`).join('')
     || `<tr><td colspan="${COLS.length + 1}" class="muted">אין תוצאות</td></tr>`;
-  $('#count').textContent = `${rows.length} / ${leads.length}`;
-  $('#sel-n').textContent = selected.size;
-  $('#send').disabled = !selected.size;
-  $('#attach').disabled = !selected.size;
+  $('#count').textContent = rows.length === leads.length ? leads.length : `${rows.length} מתוך ${leads.length}`;
+  const pick = rows.filter((l) => l.email);
+  $('#chk-page').checked = pick.length > 0 && pick.every((l) => selected.has(l.id));
+  const eng = $('#f-eng').value;
+  $('#kpis').innerHTML = CHIPS.map(([k, label]) => {
+    const n = k ? leads.filter(ENG[k]).length : leads.length;
+    return `<button type="button" class="k ${eng === k ? 'on' : ''} ${k === 'followup' && n ? 'red' : ''}" data-eng="${k}" aria-pressed="${eng === k}"><b>${n}</b><span>${label}</span></button>`;
+  }).join('');
+  updateBar();
+}
+
+// Toolbar state: how many folded filters are on, and the bulk bar for selected leads.
+function updateBar() {
+  const on = MORE_FILTERS.filter((s) => $(s).value).length;
+  $('#f-count').textContent = on;
+  $('#f-count').classList.toggle('hidden', !on);
+  $('#reset').classList.toggle('hidden', !on && !$('#q').value && !$('#f-eng').value);
+  $('#sel-n').textContent = `${selected.size} מסומנים`;
+  $('#bulk-bar').classList.toggle('hidden', !selected.size);
 }
 
 function fillFilters() {
   const opts = (k) => [...new Set(leads.map((l) => l[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  for (const [id, k, label] of [['#f-country', 'country', 'Country'], ['#f-segment', 'segment', 'Segment']]) {
+  for (const [id, k, label] of [['#f-country', 'country', 'כל המדינות'], ['#f-segment', 'segment', 'כל הסוגים']]) {
     const cur = $(id).value;
-    $(id).innerHTML = `<option value="">${label}: all</option>` + opts(k).map((o) => `<option>${esc(o)}</option>`).join('');
+    $(id).innerHTML = `<option value="">${label}</option>` + opts(k).map((o) => `<option>${esc(o)}</option>`).join('');
     $(id).value = cur;
   }
   const cur = $('#f-template').value;
-  $('#f-template').innerHTML = '<option value="">Template: all</option><option value="none">No template</option>'
+  $('#f-template').innerHTML = '<option value="">כל התבניות</option><option value="none">בלי תבנית</option>'
     + templates.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
   $('#f-template').value = cur;
 }
@@ -158,26 +184,26 @@ async function openTemplates(selId) {
   try { templates = await api('/templates'); } catch (e) { /* keep cached list */ } // never edit a stale copy
   let cur = templates.find((t) => t.id === selId) || templates[0] || null; // open on a saved template, not a blank form
   const draw = () => {
-    dlgOpen(`<h3 style="margin-top:0">Email templates</h3>
+    dlgOpen(`<h3 style="margin-top:0">תבניות מייל</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
         ${templates.map((t) => `<button class="btn sm ${cur && cur.id === t.id ? 'primary' : ''}" data-tid="${t.id}">${esc(t.name)}</button>`).join('')}
-        <button class="btn sm ${cur ? '' : 'primary'}" data-tid="new">+ New template</button>
+        <button class="btn sm ${cur ? '' : 'primary'}" data-tid="new">+ תבנית חדשה</button>
       </div>
-      <label>Name<input id="m-name" style="width:100%" value="${esc(cur ? cur.name : '')}" placeholder="e.g. Intro + YouTube demo"></label>
-      <label>Subject<input id="m-sub" dir="ltr" style="width:100%" value="${esc(cur ? cur.subject : DEFAULT_SUBJECT)}"></label>
-      <label>Body<textarea id="m-body" dir="ltr" rows="11">${esc(cur ? cur.body : DEFAULT_BODY)}</textarea></label>
+      <label>שם התבנית<input id="m-name" style="width:100%" value="${esc(cur ? cur.name : '')}" placeholder="למשל: Intro + YouTube demo"></label>
+      <label>נושא<input id="m-sub" dir="ltr" style="width:100%" value="${esc(cur ? cur.subject : DEFAULT_SUBJECT)}"></label>
+      <label>תוכן<textarea id="m-body" dir="ltr" rows="11">${esc(cur ? cur.body : DEFAULT_BODY)}</textarea></label>
       <div class="vars">
-        <button type="button" class="btn sm" id="m-yt">▶ Add YouTube video</button>
-        <button type="button" class="btn sm" id="m-link">🔗 Add link</button>
+        <button type="button" class="btn sm" id="m-yt">▶ הוספת סרטון YouTube</button>
+        <button type="button" class="btn sm" id="m-link">🔗 הוספת קישור</button>
         ${variables.map((v) => `<button type="button" class="btn sm" data-v="${esc(v)}">{{${esc(v)}}}</button>`).join('')}
       </div>
-      <div class="muted">YouTube נכנס כתמונה ממוזערת שלחיצה עליה פותחת את הסרטון. הקלקה נספרת בעמודת Clicked.</div>
-      <div class="prev"><div><b>Subject:</b> <span id="p-sub" dir="ltr"></span></div><hr><div id="p-body"></div><div id="p-warn" class="warn"></div></div>
+      <div class="muted">YouTube נכנס כתמונה ממוזערת שלחיצה עליה פותחת את הסרטון. הקלקה נספרת בעמודת "הקלקה".</div>
+      <div class="prev"><div><b>נושא:</b> <span id="p-sub" dir="ltr"></span></div><hr><div id="p-body" dir="ltr"></div><div id="p-warn" class="warn"></div></div>
       <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-        ${cur ? '<button class="btn danger" id="m-del">Delete</button>' : ''}
+        ${cur ? '<button class="btn danger" id="m-del">מחיקה</button>' : ''}
         <span style="flex:1"></span>
-        <button class="btn ghost" id="m-close">Close</button>
-        <button class="btn primary" id="m-save">Save</button>
+        <button class="btn ghost" id="m-close">סגירה</button>
+        <button class="btn primary" id="m-save">שמירה</button>
       </div>`);
     let last = $('#m-body');
     $('#m-sub').onfocus = () => { last = $('#m-sub'); };
@@ -187,7 +213,7 @@ async function openTemplates(selId) {
       try {
         const p = await api('/preview', { method: 'POST', body: { subject: $('#m-sub').value, body: $('#m-body').value } });
         $('#p-sub').textContent = p.subject; $('#p-body').innerHTML = p.html;
-        $('#p-warn').textContent = p.unknown.length ? `Unknown variables: ${p.unknown.map((u) => `{{${u}}}`).join(', ')}` : '';
+        $('#p-warn').textContent = p.unknown.length ? `משתנים לא מוכרים: ${p.unknown.map((u) => `{{${u}}}`).join(', ')}` : '';
       } catch (e) { $('#p-warn').textContent = e.message; }
     };
     const refresh = () => { clearTimeout(timer); timer = setTimeout(preview, 250); };
@@ -197,15 +223,15 @@ async function openTemplates(selId) {
       b.onclick = () => { insertAt(last, `{{${b.dataset.v}}}`); refresh(); };
     });
     $('#m-yt').onclick = () => {
-      const u = prompt('YouTube link (https://youtu.be/... or https://www.youtube.com/watch?v=...)');
+      const u = prompt('קישור YouTube (https://youtu.be/... או https://www.youtube.com/watch?v=...)');
       if (!u) return;
       if (!/^https?:\/\/(www\.)?(youtu\.be\/|youtube\.com\/)/i.test(u.trim())) return toast('לא קישור YouTube תקין', true);
       insertAt($('#m-body'), `\n[video:${u.trim()}]\n`); refresh();
     };
     $('#m-link').onclick = () => {
-      const u = prompt('Link URL (https://...)');
+      const u = prompt('כתובת הקישור (https://...)');
       if (!u || !/^https?:\/\//i.test(u.trim())) return;
-      const t = prompt('Link text', 'Learn more') || u;
+      const t = prompt('טקסט הקישור', 'Learn more') || u;
       insertAt($('#m-body'), `[${t}](${u.trim()})`); refresh();
     };
     document.querySelectorAll('#dlg-box [data-tid]').forEach((b) => {
@@ -216,7 +242,7 @@ async function openTemplates(selId) {
       const body = { name: $('#m-name').value, subject: $('#m-sub').value, body: $('#m-body').value };
       try {
         const saved = cur ? await api(`/templates/${cur.id}`, { method: 'PUT', body }) : await api('/templates', { method: 'POST', body });
-        await load(); cur = templates.find((t) => t.id === saved.id); toast('Template saved'); draw();
+        await load(); cur = templates.find((t) => t.id === saved.id); toast('התבנית נשמרה'); draw();
       } catch (e) { toast(e.message === 'name_subject_body_required' ? 'שם, נושא ותוכן חובה' : e.message, true); }
     };
     if ($('#m-del')) {
@@ -233,10 +259,10 @@ async function openTemplates(selId) {
 // ---------- Attach template to selected ----------
 function openAttach() {
   if (!templates.length) { toast('צור תבנית קודם', true); openTemplates(); return; }
-  dlgOpen(`<h3 style="margin-top:0">Attach template · ${selected.size} leads</h3>
-    <label>Template<select id="a-tpl" style="width:100%"><option value="">— none (detach) —</option>${tplOptions(0)}</select></label>
+  dlgOpen(`<h3 style="margin-top:0">שיוך תבנית · ${selected.size} לידים</h3>
+    <label>תבנית<select id="a-tpl" style="width:100%"><option value="">בלי תבנית (ניתוק)</option>${tplOptions(0)}</select></label>
     <div style="display:flex;gap:8px;margin-top:12px"><span style="flex:1"></span>
-    <button class="btn ghost" id="a-cancel">Cancel</button><button class="btn primary" id="a-ok">Attach</button></div>`);
+    <button class="btn ghost" id="a-cancel">ביטול</button><button class="btn primary" id="a-ok">שיוך</button></div>`);
   $('#a-cancel').onclick = dlgClose;
   $('#a-ok').onclick = async () => {
     try {
@@ -253,15 +279,15 @@ function openSend() {
   const first = leads.find((l) => l.id === ids[0]);
   const common = leads.filter((l) => selected.has(l.id)).map((l) => l.templateId);
   const pre = common.every((t) => t === common[0]) && common[0] ? common[0] : templates[0].id;
-  dlgOpen(`<h3 style="margin-top:0">Send email · ${ids.length} נבחרו</h3>
+  dlgOpen(`<h3 style="margin-top:0">שליחת מייל · ${ids.length} לידים</h3>
     ${emailConfigured ? '' : '<p class="warn">שליחה לא מוגדרת בשרת. תצוגה מקדימה זמינה, שליחה תיכשל עם הודעת הגדרה.</p>'}
-    <label>Template<select id="s-tpl" style="width:100%">${tplOptions(pre)}</select></label>
+    <label>תבנית<select id="s-tpl" style="width:100%">${tplOptions(pre)}</select></label>
     <div class="muted">תצוגה מקדימה ל: <b dir="ltr">${esc(first.organization)}</b></div>
-    <div class="prev"><div><b>Subject:</b> <span id="p-sub" dir="ltr"></span></div><hr><div id="p-body"></div><div id="p-warn" class="warn"></div></div>
+    <div class="prev"><div><b>נושא:</b> <span id="p-sub" dir="ltr"></span></div><hr><div id="p-body" dir="ltr"></div><div id="p-warn" class="warn"></div></div>
     <hr>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input id="t-to" type="email" dir="ltr" placeholder="כתובת לבדיקה" style="min-width:220px">
-      <button class="btn" id="t-test">Send test to me</button>
+      <button class="btn" id="t-test">שליחת בדיקה</button>
       <span style="flex:1"></span>
       <label class="chk"><input type="checkbox" id="t-resend"> כלול גם מי שכבר נשלח</label>
       <button class="btn ghost" id="t-cancel">ביטול</button>
@@ -308,7 +334,11 @@ async function poll() {
 // ---------- Wiring ----------
 ['#q', '#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template', '#f-eng'].forEach((s) => { $(s).oninput = render; });
 $('#reset').onclick = () => { ['#q', '#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template', '#f-eng'].forEach((s) => { $(s).value = ''; }); render(); };
-$('#sel-all').onclick = () => { filtered().filter((l) => l.email).forEach((l) => selected.add(l.id)); render(); };
+$('#f-toggle').onclick = () => {
+  const open = $('#f-more').classList.toggle('hidden') === false;
+  $('#f-toggle').setAttribute('aria-expanded', String(open));
+};
+$('#kpis').onclick = (e) => { const k = e.target.closest('[data-eng]'); if (k) { $('#f-eng').value = k.dataset.eng; render(); } };
 $('#sel-none').onclick = () => { selected.clear(); render(); };
 $('#send').onclick = openSend;
 $('#attach').onclick = openAttach;
@@ -327,9 +357,9 @@ $('#imp-file').onchange = async (e) => {
 };
 // ---------- Customer card ----------
 const ACT = {
-  sent: ['✉', 'Email sent'], delivered: ['✓', 'Delivered'], opened: ['👁', 'Opened'], clicked: ['↗', 'Clicked a link'],
-  bounced: ['⚠', 'Bounced'], failed: ['⚠', 'Send failed'], replied: ['↩', 'Replied'], template: ['▤', 'Template'],
-  edited: ['✎', 'Lead edited'], email_changed: ['✎', 'Email changed'], follow_up: ['⏰', 'Follow-up'], note: ['📝', 'Note'], reply_sent: ['↪', 'Reply sent'],
+  sent: ['✉', 'מייל נשלח'], delivered: ['✓', 'נמסר'], opened: ['👁', 'נפתח'], clicked: ['↗', 'הקלקה על קישור'],
+  bounced: ['⚠', 'חזר'], failed: ['⚠', 'השליחה נכשלה'], replied: ['↩', 'השיב'], template: ['▤', 'תבנית'],
+  edited: ['✎', 'הליד נערך'], email_changed: ['✎', 'המייל שונה'], follow_up: ['⏰', 'מעקב'], note: ['📝', 'הערה'], reply_sent: ['↪', 'תשובה נשלחה'],
 };
 async function openCard(id) {
   const l = leads.find((x) => x.id === id);
@@ -344,54 +374,54 @@ async function openCard(id) {
   const row = ([h, v]) => (v ? `<div style="display:flex;gap:8px"><span class="muted" style="min-width:110px">${h}</span><span dir="ltr">${esc(v)}</span></div>` : '');
   dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
       <h3 style="margin:0">${esc(l.organization)} ${l.priority ? `<span class="pb ${esc(l.priority)}">${esc(l.priority)}</span>` : ''}</h3>
-      <div><button class="btn sm" id="cd-edit">✎ Edit</button> <button class="btn sm" id="cd-close">✕</button></div></div>
+      <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
     <div style="margin:8px 0;display:grid;gap:3px;font-size:13px">
-      ${[['Country', l.country], ['Segment', l.segment], ['Product Fit', l.productFit], ['Website', l.website], ['Email', l.email], ['Phone', l.phone],
-        ["Why They'd Buy", l.whyTheydBuy], ['Template', l.template && l.template.name], ['Email status', l.emailStatus],
-        ['Last emailed', fmt(l.lastEmailedAt)], ['Replied', fmt(l.repliedAt)]].map(row).join('')}
+      ${[['מדינה', l.country], ['סוג', l.segment], ['התאמת מוצר', FIT[l.productFit] || l.productFit], ['אתר', l.website], ['מייל', l.email], ['טלפון', l.phone],
+        ['למה יקנו', l.whyTheydBuy], ['תבנית', l.template && l.template.name], ['סטטוס מייל', STATUS[l.emailStatus] || l.emailStatus],
+        ['נשלח לאחרונה', fmt(l.lastEmailedAt)], ['השיב', fmt(l.repliedAt)]].map(row).join('')}
     </div>
     <div class="toolbar wrap" style="margin:10px 0">
-      <label style="margin:0">Follow-up date <input type="date" id="cd-fu" value="${day(l.followUpAt)}"></label>
-      <button class="btn sm" id="cd-fu-save">Save date</button>
-      <button class="btn sm" id="cd-fu-clear">Clear</button>
+      <label style="margin:0">תאריך מעקב <input type="date" id="cd-fu" value="${day(l.followUpAt)}"></label>
+      <button class="btn sm" id="cd-fu-save">שמירת תאריך</button>
+      <button class="btn sm" id="cd-fu-clear">ניקוי</button>
     </div>
-    <h4 style="margin:12px 0 6px">Reply</h4>
-    <input id="cd-rsub" dir="ltr" style="width:100%;margin-bottom:6px" placeholder="Subject" value="${esc(defSubject)}">
-    <textarea id="cd-rbody" rows="7" dir="ltr" style="width:100%" placeholder="Write the reply here, or press Suggest to get a draft from Claude. Your signature is added automatically."></textarea>
+    <h4 style="margin:12px 0 6px">תשובה</h4>
+    <input id="cd-rsub" dir="ltr" style="width:100%;margin-bottom:6px" placeholder="נושא" value="${esc(defSubject)}">
+    <textarea id="cd-rbody" rows="7" dir="ltr" style="width:100%" placeholder="כתוב כאן את התשובה, או לחץ על הצעת תשובה לקבלת טיוטה מ-Claude. החתימה נוספת אוטומטית."></textarea>
     <div class="toolbar wrap" style="margin:6px 0 4px">
-      <button class="btn sm" id="cd-suggest">✨ Suggest reply</button>
-      <button class="btn primary sm" id="cd-rsend" ${l.email ? '' : 'disabled'}>Send reply to ${esc(l.email || '')}</button>
+      <button class="btn sm" id="cd-suggest">✨ הצעת תשובה</button>
+      <button class="btn primary sm" id="cd-rsend" ${l.email ? '' : 'disabled'}>שליחת תשובה ל-<span dir="ltr">${esc(l.email || '')}</span></button>
       <span class="muted" id="cd-rhint" style="font-size:12px"></span>
     </div>
-    <label style="margin-top:12px">Add a note (call, meeting, reply, anything)
+    <label style="margin-top:12px">הוספת הערה (שיחה, פגישה, תשובה, כל דבר)
       <textarea id="cd-note" rows="2" dir="ltr" style="width:100%"></textarea></label>
-    <div class="toolbar" style="margin:6px 0 12px"><button class="btn primary sm" id="cd-note-add">Add note</button></div>
-    <h4 style="margin:0 0 6px">Activity</h4>
+    <div class="toolbar" style="margin:6px 0 12px"><button class="btn primary sm" id="cd-note-add">הוספת הערה</button></div>
+    <h4 style="margin:0 0 6px">היסטוריה</h4>
     <div id="cd-acts" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px">
       ${acts.map((a) => { const [ico, lab] = ACT[a.type] || ['•', a.type];
         return `<div style="padding:6px 10px;border-bottom:1px solid var(--line);font-size:13px"><span class="muted" style="font-size:12px">${esc(fmt(a.createdAt))}</span>
           <b>${ico} ${lab}</b>${a.detail ? `<div dir="ltr" style="white-space:pre-wrap;color:#444">${esc(a.detail)}</div>` : ''}</div>`; }).join('')
-        || '<div class="muted" style="padding:10px">No activity yet</div>'}
+        || '<div class="muted" style="padding:10px">אין עדיין פעילות</div>'}
     </div>`);
   $('#cd-close').onclick = dlgClose;
   $('#cd-edit').onclick = () => editLead(id);
-  const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('Saved'); openCard(id); } catch (e) { toast(e.message, true); } };
+  const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('נשמר'); openCard(id); } catch (e) { toast(e.message, true); } };
   $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);
   $('#cd-fu-clear').onclick = () => saveFu(null);
   $('#cd-suggest').onclick = async () => {
-    const b = $('#cd-suggest'); b.disabled = true; $('#cd-rhint').textContent = 'Drafting...';
+    const b = $('#cd-suggest'); b.disabled = true; $('#cd-rhint').textContent = 'מנסח...';
     try {
       const r = await api(`/leads/${id}/suggest`, { method: 'POST', body: {} });
       $('#cd-rbody').value = r.text;
-      $('#cd-rhint').textContent = r.source === 'ai' ? (acts.some((a) => a.type === 'replied') ? 'Draft answering their reply. Review and edit before sending.' : 'No reply from them yet, so this is a follow-up draft. Review and edit before sending.') : 'Basic template (AI key missing or unavailable). Edit before sending.';
+      $('#cd-rhint').textContent = r.source === 'ai' ? (acts.some((a) => a.type === 'replied') ? 'טיוטה שעונה לתשובה שלהם. לעבור ולערוך לפני שליחה.' : 'הם עוד לא השיבו, אז זו טיוטת מעקב. לעבור ולערוך לפני שליחה.') : 'תבנית בסיסית (מפתח ה-AI חסר או לא זמין). לערוך לפני שליחה.';
     } catch (e) { $('#cd-rhint').textContent = ''; toast(e.message, true); }
     b.disabled = false;
   };
   $('#cd-rsend').onclick = async () => {
     const subject = $('#cd-rsub').value.trim(), body = $('#cd-rbody').value.trim();
-    if (!subject || !body) { toast('Subject and reply text are required', true); return; }
-    if (!confirm(`Send this reply to ${l.email}?`)) return;
-    try { await api(`/leads/${id}/reply`, { method: 'POST', body: { subject, body } }); toast('Reply sent'); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+    if (!subject || !body) { toast('חובה למלא נושא ותוכן', true); return; }
+    if (!confirm(`לשלוח את התשובה ל-${l.email}?`)) return;
+    try { await api(`/leads/${id}/reply`, { method: 'POST', body: { subject, body } }); toast('התשובה נשלחה'); await load(); openCard(id); } catch (e) { toast(e.message, true); }
   };
   $('#cd-note-add').onclick = async () => {
     const detail = $('#cd-note').value.trim();
@@ -401,22 +431,22 @@ async function openCard(id) {
 }
 
 // ---------- Edit a lead ----------
-const EDIT_FIELDS = [['organization', 'Organization'], ['country', 'Country'], ['segment', 'Segment'], ['productFit', 'Product Fit'],
-  ['whyTheydBuy', "Why They'd Buy"], ['website', 'Website'], ['email', 'Email'], ['phone', 'Phone'], ['priority', 'Priority']];
+const EDIT_FIELDS = [['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמת מוצר (Course / Simulator / Both)'],
+  ['whyTheydBuy', 'למה יקנו'], ['website', 'אתר'], ['email', 'מייל'], ['phone', 'טלפון'], ['priority', 'עדיפות (A / B / C)']];
 function editLead(id) {
   const l = leads.find((x) => x.id === id);
   if (!l) return;
-  dlgOpen(`<h3 style="margin-top:0">Edit lead</h3>
+  dlgOpen(`<h3 style="margin-top:0">עריכת ליד</h3>
     ${EDIT_FIELDS.map(([k, h]) => `<label>${h}${k === 'whyTheydBuy'
       ? `<textarea data-f="${k}" rows="3" dir="ltr" style="width:100%">${esc(l[k])}</textarea>`
       : `<input data-f="${k}" value="${esc(l[k])}" dir="ltr" style="width:100%">`}</label>`).join('')}
-    <p class="muted" style="font-size:12px;margin:8px 0 0">Changing the email resets this lead's send status so it can be mailed again.</p>
-    <div class="toolbar" style="margin-top:12px"><button class="btn primary" id="le-save">Save</button><button class="btn" id="le-cancel">Cancel</button></div>`);
+    <p class="muted" style="font-size:12px;margin:8px 0 0">שינוי כתובת המייל מאפס את סטטוס השליחה של הליד, כך שאפשר לשלוח אליו שוב.</p>
+    <div class="toolbar" style="margin-top:12px"><button class="btn primary" id="le-save">שמירה</button><button class="btn" id="le-cancel">ביטול</button></div>`);
   $('#le-cancel').onclick = dlgClose;
   $('#le-save').onclick = async () => {
     const body = {};
     document.querySelectorAll('#dlg-box [data-f]').forEach((el) => { body[el.dataset.f] = el.value; });
-    try { await api(`/leads/${id}`, { method: 'PUT', body }); dlgClose(); await load(); toast('Lead saved'); } catch (e) { toast(e.message, true); }
+    try { await api(`/leads/${id}`, { method: 'PUT', body }); dlgClose(); await load(); toast('הליד נשמר'); } catch (e) { toast(e.message, true); }
   };
 }
 
@@ -431,7 +461,7 @@ $('#tbl').addEventListener('click', (e) => {
   if (e.target.classList.contains('rc')) {
     const id = +e.target.dataset.id;
     if (e.target.checked) selected.add(id); else selected.delete(id);
-    $('#sel-n').textContent = selected.size; $('#send').disabled = !selected.size; $('#attach').disabled = !selected.size;
+    render();
   }
 });
 

@@ -3,16 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GMDSS Outreach Leads</title>
+<title>לידים GMDSS</title>
 <link rel="stylesheet" href="/styles.css">
 <style>
-.gtable-wrap{overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);max-height:62vh}
+/* The table takes whatever height is left under the toolbars, so the page has one scrollbar, not two. */
+main{display:flex;flex-direction:column;min-height:calc(100vh - 56px)}
 body.embed .top{display:none}
-body.embed main{padding:8px 10px 20px}
-body.embed .gtable-wrap{max-height:70vh}
+body.embed main{padding:8px 10px 12px;min-height:100vh;height:100vh}
+.gtable-wrap{flex:1;min-height:260px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.ghead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.ghead h2{margin:0;font-size:18px}
+.bulkbar{position:static}
+.kpis2{margin-bottom:10px}
+.kpis2 button.k{font:inherit;color:inherit;text-align:start;padding:6px 14px;min-width:104px}
+.kpis2 .k b{font-size:20px}
+.kpis2 .k span{font-size:12px;color:var(--muted)}
+@media(max-width:700px){.kpis2{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}.kpis2 button.k{flex:none;min-width:88px}}
+.kpis2 .k.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 table.g{border-collapse:collapse;width:100%;font-size:13px}
 table.g th,table.g td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
 table.g th{position:sticky;top:0;background:#eef0eb;cursor:pointer;white-space:nowrap;user-select:none;z-index:1}
+table.g tbody tr:hover{background:#f6f8f5}
 table.g tr.p-A td:first-child{box-shadow:inset 5px 0 0 #b23a3a}
 table.g tr.p-B td:first-child{box-shadow:inset 5px 0 0 #c28a1d}
 table.g tr.p-C td:first-child{box-shadow:inset 5px 0 0 #aab3ad}
@@ -42,31 +53,38 @@ table.g tr.p-A{background:#fdf3f3}table.g tr.p-B{background:#fdf8ec}
   <nav><a class="btn ghost" href="/">← חזרה ל-CRM</a></nav>
 </header>
 <main>
-  <h2 style="margin:0 0 12px">GMDSS Outreach Leads <span class="muted" id="count"></span></h2>
-  <div id="cfgwarn" class="warn hidden" style="margin-bottom:8px"></div>
-  <div class="toolbar wrap">
-    <input id="q" type="search" placeholder="חיפוש בכל השדות" style="min-width:200px">
-    <select id="f-country"><option value="">Country: all</option></select>
-    <select id="f-segment"><option value="">Segment: all</option></select>
-    <select id="f-fit"><option value="">Product Fit: all</option><option>Course</option><option>Simulator</option><option>Both</option></select>
-    <select id="f-priority"><option value="">Priority: all</option><option>A</option><option>B</option><option>C</option></select>
-    <select id="f-template"><option value="">Template: all</option></select>
-    <select id="f-eng">
-      <option value="">Email: all</option><option value="sent">Sent</option><option value="opened">Opened</option>
-      <option value="clicked">Clicked a link</option><option value="unopened">Sent, not opened</option><option value="failed">Failed / bounced</option>
-      <option value="replied">Replied</option><option value="followup">Follow-up due</option>
-    </select>
-    <button class="btn ghost" id="reset">אפס</button>
-  </div>
-  <div class="toolbar wrap">
-    <button class="btn" id="tpls">✎ Templates</button>
-    <button class="btn" id="attach" disabled>Attach template</button>
-    <button class="btn primary" id="send" disabled>✉ Send email (<span id="sel-n">0</span>)</button>
-    <span class="spacer"></span>
-    <button class="btn" id="sel-all">בחר את כל המסוננים</button>
-    <button class="btn" id="sel-none">נקה בחירה</button>
-    <button class="btn" id="refresh" title="רענן סטטוס פתיחות והקלקות">⟳</button>
+  <div class="ghead">
+    <h2>לידים GMDSS <span class="muted" id="count"></span></h2>
+    <span class="spacer" style="flex:1"></span>
+    <button class="btn" id="tpls">✎ תבניות מייל</button>
     <button class="btn" id="imp">ייבוא CSV</button><input type="file" id="imp-file" accept=".csv,text/csv" class="hidden">
+    <button class="btn" id="refresh" title="רענון סטטוס פתיחות והקלקות" aria-label="רענון">⟳</button>
+  </div>
+  <div id="cfgwarn" class="warn hidden" style="margin-bottom:8px"></div>
+  <div class="kpis2" id="kpis"></div>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="חיפוש בכל השדות" style="min-width:200px">
+    <select id="f-eng" aria-label="סטטוס מייל">
+      <option value="">כל סטטוסי המייל</option><option value="sent">נשלח</option><option value="opened">נפתח</option>
+      <option value="clicked">הקליק על קישור</option><option value="unopened">נשלח ולא נפתח</option><option value="failed">נכשל / חזר</option>
+      <option value="replied">השיב</option><option value="followup">מעקב להיום</option>
+    </select>
+    <button class="btn" id="f-toggle" type="button" aria-expanded="false" aria-controls="f-more">סינון <span id="f-count" class="badge hidden"></span></button>
+    <button class="btn ghost hidden" id="reset" type="button">נקה סינון</button>
+  </div>
+  <div class="toolbar f-more hidden" id="f-more">
+    <select id="f-country" aria-label="מדינה"><option value="">כל המדינות</option></select>
+    <select id="f-segment" aria-label="סוג"><option value="">כל הסוגים</option></select>
+    <select id="f-fit" aria-label="התאמת מוצר"><option value="">כל ההתאמות</option><option value="Course">קורס</option><option value="Simulator">סימולטור</option><option value="Both">שניהם</option></select>
+    <select id="f-priority" aria-label="עדיפות"><option value="">כל העדיפויות</option><option>A</option><option>B</option><option>C</option></select>
+    <select id="f-template" aria-label="תבנית"><option value="">כל התבניות</option></select>
+  </div>
+  <div class="toolbar bulkbar hidden" id="bulk-bar">
+    <b id="sel-n"></b>
+    <button class="btn primary" id="send">✉ שליחת מייל</button>
+    <button class="btn" id="attach">שיוך תבנית</button>
+    <span class="spacer"></span>
+    <button class="btn ghost" id="sel-none">נקה בחירה</button>
   </div>
   <div class="gtable-wrap"><table class="g" id="tbl"><thead></thead><tbody></tbody></table></div>
 </main>
