@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const prisma = require('../db');
 const email = require('./email');
+const gmdssReminders = require('./gmdssReminders');
 
 const LOCK_KEY = 72310451; // pg advisory lock id: only one replica runs a tick at a time
 
@@ -30,6 +31,12 @@ function start() {
       if (r.queued || r.sent || r.failed || r.stale) console.log('[scheduler]', JSON.stringify(r));
     } catch (e) {
       console.error('[scheduler] tick failed', e);
+    }
+    try {
+      const g = await gmdssReminders.runDue();
+      if (g.sent || g.failed) console.log('[gmdss-reminders]', JSON.stringify(g));
+    } catch (e) {
+      console.error('[gmdss-reminders] tick failed', e);
     }
   });
   // Run once on boot so due work isn't delayed by up to a minute after a redeploy.

@@ -833,12 +833,12 @@ $('#set-prev').onclick = async () => {
 };
 
 // ---------------- Wiring ----------------
-const views = { mail: renderMail, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {}, gmdss: async () => { const f = $('#gmdss-frame'); if (!f.getAttribute('src')) f.src = '/gmdss?embed=1'; } };
+const views = { mail: renderMail, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, sequences: renderSequences, stats: renderStats, import: async () => {}, gmdss: async () => { const f = $('#gmdss-frame'); if (!f.getAttribute('src')) f.src = '/gmdss?embed=1'; } };
 function refreshView() { views[view]().catch(fail); }
 function routeOf() {
   const m = location.hash.match(/^#\/([a-z]+)(?:\/lead\/(\d+))?$/);
   if (!m) return null;
-  const v = m[1] === 'board' ? 'leads' : m[1]; // the board view was merged into the leads table
+  const v = m[1]; // the Leads page was removed; #/leads and #/board no longer resolve
   return views[v] ? { view: v, lead: m[2] ? +m[2] : null } : null;
 }
 // Back/Forward or a hand-edited address: bring the screen in line with the hash.
@@ -937,7 +937,6 @@ $('#bulk-enroll').onclick = async () => {
   api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   let saved = 'followups';
   try { saved = localStorage.getItem('crm.view') || 'followups'; } catch { /* ignore */ }
-  if (saved === 'board') saved = 'leads';
   const route = routeOf();
   show(route ? route.view : (views[saved] ? saved : 'followups'), true);
   if (route && route.lead) openLead(route.lead, true).catch(fail);

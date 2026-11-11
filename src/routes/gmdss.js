@@ -5,6 +5,7 @@ const settings = require('../services/settings');
 const { getProvider } = require('../services/provider');
 const { renderRich, renderPlain, htmlToText } = require('../services/render');
 const { suggestReply } = require('../services/suggest');
+const reminders = require('../services/gmdssReminders');
 const { VARIABLES, merge, parseCsv, importRows, logActivity, syncReplies } = require('../services/gmdss');
 
 const router = express.Router();
@@ -119,6 +120,34 @@ router.post('/leads/:id/reply', wrap(async (req, res) => {
   await logActivity(prisma, lead.id, 'reply_sent', `${subject}\n${text}`);
   await prisma.gmdssLead.update({ where: { id: lead.id }, data: { followUpAt: new Date(Date.now() + FUP_DAYS * 86400000) } });
   res.json({ sentTo: lead.email });
+}));
+
+// ---------- Reminders (opens/clicks drive the wording) and access codes ----------
+router.get('/reminders', wrap(async (_req, res) => {
+  const due = await reminders.dueLeads();
+  res.json({
+    enabled: await reminders.isEnabled(), max: reminders.MAX_REMINDERS, waitDays: reminders.WAIT_DAYS, dailyCap: reminders.DAILY_CAP,
+    inWindow: reminders.inSendWindow(), emailConfigured: !notConfigured(),
+    due: due.map(({ l, d }) => ({ id: l.id, organization: l.organization, email: l.email, segment: d.segment, n: d.n, openCount: l.openCount, clickCount: l.clickCount, dueAt: d.dueAt })),
+  });
+}));
+router.put('/reminders', wrap(async (req, res) => {
+  await reminders.setEnabled(!!(req.body && req.body.enabled));
+  res.json({ enabled: await reminders.isEnabled() });
+}));
+router.post('/reminders/run', wrap(async (_req, res) => {
+  if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
+  res.json(await reminders.runDue(new Date(), { ignoreWindow: true }));
+}));
+router.post('/leads/:id/remind', wrap(async (req, res) => {
+  if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
+  const r = await reminders.sendReminder(Number(req.params.id), { force: true });
+  if (r.failed) throw bad(r.error, 502);
+  res.json(r);
+}));
+router.post('/leads/:id/code', wrap(async (req, res) => {
+  if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
+  res.json(await reminders.sendCode(Number(req.params.id), { code: req.body && req.body.code, note: req.body && req.body.note }));
 }));
 
 // Customer card: activity timeline + manual notes.

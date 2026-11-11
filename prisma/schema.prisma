@@ -180,6 +180,10 @@ model GmdssLead {
   notes         String?
   followUpAt    DateTime? @map("follow_up_at")
   repliedAt     DateTime? @map("replied_at")
+  reminderCount Int       @default(0) @map("reminder_count")
+  lastReminderAt DateTime? @map("last_reminder_at")
+  codeSentAt    DateTime? @map("code_sent_at")
+  accessCode    String?   @map("access_code")
   activities    GmdssActivity[]
 
   @@map("gmdss_leads")

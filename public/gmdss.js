@@ -359,7 +359,7 @@ $('#imp-file').onchange = async (e) => {
 const ACT = {
   sent: ['✉', 'מייל נשלח'], delivered: ['✓', 'נמסר'], opened: ['👁', 'נפתח'], clicked: ['↗', 'הקלקה על קישור'],
   bounced: ['⚠', 'חזר'], failed: ['⚠', 'השליחה נכשלה'], replied: ['↩', 'השיב'], template: ['▤', 'תבנית'],
-  edited: ['✎', 'הליד נערך'], email_changed: ['✎', 'המייל שונה'], follow_up: ['⏰', 'מעקב'], note: ['📝', 'הערה'], reply_sent: ['↪', 'תשובה נשלחה'],
+  edited: ['✎', 'הליד נערך'], email_changed: ['✎', 'המייל שונה'], follow_up: ['⏰', 'מעקב'], note: ['📝', 'הערה'], reply_sent: ['↪', 'תשובה נשלחה'], reminder: ['🔔', 'תזכורת נשלחה'], code_sent: ['🔑', 'קוד גישה נשלח'],
 };
 async function openCard(id) {
   const l = leads.find((x) => x.id === id);
@@ -378,12 +378,16 @@ async function openCard(id) {
     <div style="margin:8px 0;display:grid;gap:3px;font-size:13px">
       ${[['מדינה', l.country], ['סוג', l.segment], ['התאמת מוצר', FIT[l.productFit] || l.productFit], ['אתר', l.website], ['מייל', l.email], ['טלפון', l.phone],
         ['למה יקנו', l.whyTheydBuy], ['תבנית', l.template && l.template.name], ['סטטוס מייל', STATUS[l.emailStatus] || l.emailStatus],
-        ['נשלח לאחרונה', fmt(l.lastEmailedAt)], ['השיב', fmt(l.repliedAt)]].map(row).join('')}
+        ['נשלח לאחרונה', fmt(l.lastEmailedAt)], ['פתיחות / הקלקות', `${l.openCount || 0} / ${l.clickCount || 0}`], ['תזכורות', `${l.reminderCount || 0}${l.lastReminderAt ? ` (אחרונה ${fmt(l.lastReminderAt)})` : ''}`], ['קוד גישה', l.accessCode ? `${l.accessCode} (${fmt(l.codeSentAt)})` : ''], ['השיב', fmt(l.repliedAt)]].map(row).join('')}
     </div>
     <div class="toolbar wrap" style="margin:10px 0">
       <label style="margin:0">תאריך מעקב <input type="date" id="cd-fu" value="${day(l.followUpAt)}"></label>
       <button class="btn sm" id="cd-fu-save">שמירת תאריך</button>
       <button class="btn sm" id="cd-fu-clear">ניקוי</button>
+    </div>
+    <div class="toolbar wrap" style="margin:6px 0">
+      <button class="btn sm" id="cd-remind" ${l.email && !l.repliedAt ? '' : 'disabled'}>🔔 שלח תזכורת עכשיו</button>
+      <button class="btn sm" id="cd-code" ${l.email ? '' : 'disabled'}>🔑 שלח קוד גישה</button>
     </div>
     <h4 style="margin:12px 0 6px">תשובה</h4>
     <input id="cd-rsub" dir="ltr" style="width:100%;margin-bottom:6px" placeholder="נושא" value="${esc(defSubject)}">
@@ -408,6 +412,16 @@ async function openCard(id) {
   const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('נשמר'); openCard(id); } catch (e) { toast(e.message, true); } };
   $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);
   $('#cd-fu-clear').onclick = () => saveFu(null);
+  $('#cd-remind').onclick = async () => {
+    if (!confirm(`לשלוח תזכורת ל-${l.email}?`)) return;
+    try { const r = await api(`/leads/${id}/remind`, { method: 'POST', body: {} }); toast(`תזכורת ${r.n} נשלחה`); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+  };
+  $('#cd-code').onclick = async () => {
+    const code = prompt('קוד גישה לשליחה (השאר ריק ליצירת קוד אוטומטי):', l.accessCode || '');
+    if (code === null) return;
+    if (!confirm(`לשלוח קוד גישה ל-${l.email}?`)) return;
+    try { const r = await api(`/leads/${id}/code`, { method: 'POST', body: { code } }); toast(`הקוד ${r.code} נשלח`); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+  };
   $('#cd-suggest').onclick = async () => {
     const b = $('#cd-suggest'); b.disabled = true; $('#cd-rhint').textContent = 'מנסח...';
     try {
@@ -429,6 +443,31 @@ async function openCard(id) {
     try { await api(`/leads/${id}/activities`, { method: 'POST', body: { detail } }); openCard(id); } catch (e) { toast(e.message, true); }
   };
 }
+
+// ---------- Reminders dialog ----------
+const SEG = { hot: 'הקליק', warm: 'פתח', cold: 'לא פתח' };
+async function openReminders() {
+  let r;
+  try { r = await api('/reminders'); } catch (e) { toast(e.message, true); return; }
+  dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start"><h3 style="margin:0">תזכורות אוטומטיות</h3><button class="btn sm" id="rm-close" aria-label="סגירה">✕</button></div>
+    <p class="muted" style="font-size:13px">ליד ששלחו לו ולא השיב מקבל עד ${r.max} תזכורות. הניסוח והמרווח נקבעים לפי ההתנהגות: <b>הקליק</b> אחרי ${r.waitDays.hot} ימים (הצעה לשיחה או לקוד גישה), <b>פתח בלי קליק</b> אחרי ${r.waitDays.warm} ימים, <b>לא פתח</b> אחרי ${r.waitDays.cold} ימים. שליחה ראשון עד חמישי, 09:00 עד 17:00 שעון ישראל, עד ${r.dailyCap} ביום. תשובה או חזרת מייל עוצרות הכול.</p>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rm-on" ${r.enabled ? 'checked' : ''}> <b>שליחה אוטומטית פעילה</b></label>
+    <div class="muted" style="font-size:12px;margin:4px 0">${r.inWindow ? 'כרגע בתוך חלון השליחה.' : 'כרגע מחוץ לחלון השליחה.'}</div>
+    <h4 style="margin:12px 0 6px">מועמדים לתזכורת כעת (${r.due.length})</h4>
+    <div style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px">
+      ${r.due.map((d) => `<div style="padding:6px 10px;border-bottom:1px solid var(--line);font-size:13px"><b>${esc(d.organization)}</b> <span class="muted" dir="ltr">${esc(d.email)}</span> · ${SEG[d.segment]} · תזכורת ${d.n}/${r.max} · פתיחות ${d.openCount}, הקלקות ${d.clickCount}</div>`).join('') || '<div class="muted" style="padding:10px">אין כרגע לידים שהגיע זמנם</div>'}
+    </div>
+    <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="rm-run" ${r.due.length && r.emailConfigured ? '' : 'disabled'}>שלח את כל ${r.due.length} עכשיו</button></div>`);
+  $('#rm-close').onclick = dlgClose;
+  $('#rm-on').onchange = async (e) => {
+    try { await api('/reminders', { method: 'PUT', body: { enabled: e.target.checked } }); toast(e.target.checked ? 'התזכורות האוטומטיות הופעלו' : 'התזכורות האוטומטיות כובו'); } catch (err) { toast(err.message, true); e.target.checked = !e.target.checked; }
+  };
+  $('#rm-run').onclick = async () => {
+    if (!confirm(`לשלוח עכשיו תזכורת ל-${r.due.length} לידים?`)) return;
+    try { const x = await api('/reminders/run', { method: 'POST', body: {} }); toast(`נשלחו ${x.sent}${x.failed ? `, נכשלו ${x.failed}` : ''}`); await load(); openReminders(); } catch (err) { toast(err.message, true); }
+  };
+}
+$('#rem').onclick = openReminders;
 
 // ---------- Edit a lead ----------
 const EDIT_FIELDS = [['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמת מוצר (Course / Simulator / Both)'],
