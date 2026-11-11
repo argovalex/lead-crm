@@ -9,7 +9,7 @@ const { merge, logActivity } = require('./gmdss');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_REMINDERS = 3;
-const WAIT_DAYS = { hot: 3, warm: 5, cold: 7 };
+const WAIT_DAYS = { hot: 3, warm: 3, cold: 3 };
 const DAILY_CAP = parseInt(process.env.GMDSS_REMINDER_DAILY_CAP || '40', 10);
 const SETTING_KEY = 'gmdssReminders';
 const DAY = 86400000;
@@ -134,7 +134,7 @@ async function sendReminder(id, { force = false, now = new Date() } = {}) {
   try {
     const { providerId } = await getProvider().send({ to: l.email, subject: m.subject, html: m.html, text: m.text, idempotencyKey: `gmdss-rem:${id}:${d.n}` });
     // New provider id so opens/clicks of the reminder land on this lead; counters stay cumulative.
-    await prisma.gmdssLead.update({ where: { id }, data: { providerId, followUpAt: new Date(+now + 7 * DAY) } });
+    await prisma.gmdssLead.update({ where: { id }, data: { providerId, followUpAt: new Date(+now + 3 * DAY) } });
     await logActivity(prisma, id, 'reminder', `#${d.n} (${d.segment}) ${m.subject}`);
     return { sent: true, segment: d.segment, n: d.n };
   } catch (e) {
@@ -183,7 +183,7 @@ async function sendCode(id, { code, note } = {}) {
   const text = `${renderPlain(body)}${sig ? `\n\n${htmlToText(sig)}` : ''}`;
   const { providerId } = await getProvider().send({ to: l.email, subject, html, text, idempotencyKey: `gmdss-code:${id}:${Date.now()}` });
   const now = new Date();
-  await prisma.gmdssLead.update({ where: { id }, data: { accessCode: c, codeSentAt: now, providerId, followUpAt: new Date(+now + 7 * DAY) } });
+  await prisma.gmdssLead.update({ where: { id }, data: { accessCode: c, codeSentAt: now, providerId, followUpAt: new Date(+now + 3 * DAY) } });
   await logActivity(prisma, id, 'code_sent', `Access code ${c} sent`);
   return { code: c, sentTo: l.email };
 }

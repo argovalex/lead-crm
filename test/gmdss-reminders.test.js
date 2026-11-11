@@ -18,14 +18,14 @@ test('segment follows clicks, then opens', () => {
   assert.equal(segmentOf(base()), 'cold');
 });
 
-test('waits 3 / 5 / 7 days by segment', () => {
+test('waits 3 days for every segment', () => {
   const sent = (days) => new Date(+now - days * DAY);
   assert.ok(dueInfo(base({ clickCount: 1, lastEmailedAt: sent(3) }), now));
   assert.equal(dueInfo(base({ clickCount: 1, lastEmailedAt: sent(2.9) }), now), null);
-  assert.ok(dueInfo(base({ openCount: 1, lastEmailedAt: sent(5) }), now));
-  assert.equal(dueInfo(base({ openCount: 1, lastEmailedAt: sent(4) }), now), null);
-  assert.ok(dueInfo(base({ lastEmailedAt: sent(7) }), now));
-  assert.equal(dueInfo(base({ lastEmailedAt: sent(6) }), now), null);
+  assert.ok(dueInfo(base({ openCount: 1, lastEmailedAt: sent(3) }), now));
+  assert.equal(dueInfo(base({ openCount: 1, lastEmailedAt: sent(2.9) }), now), null);
+  assert.ok(dueInfo(base({ lastEmailedAt: sent(3) }), now));
+  assert.equal(dueInfo(base({ lastEmailedAt: sent(2.9) }), now), null);
 });
 
 test('the wait restarts from the last reminder', () => {
