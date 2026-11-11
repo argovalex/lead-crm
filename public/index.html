@@ -13,7 +13,6 @@
   <nav id="tabs">
     <button data-view="followups">היום <span id="fu-count" class="badge hidden"></span></button>
     <button data-view="mail">דואר <span id="mail-count" class="badge hidden"></span></button>
-    <button data-view="board" class="active">לוח</button>
     <button data-view="leads">לידים</button>
     <button data-view="sequences">קמפיינים</button>
     <button data-view="outbox">אישור קמפיין <span id="ob-count" class="badge hidden"></span></button>
@@ -74,20 +73,16 @@
     </div>
   </section>
 
-  <section id="view-board" class="view hidden">
-    <div class="toolbar">
-      <input id="board-q" placeholder="חיפוש…">
-      <button class="btn primary" data-action="compose">✉ מייל חדש</button>
-      <button class="btn" data-action="paste-reply">↩ תשובה שהתקבלה</button>
-      <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
-    </div>
-    <div class="board" id="board"></div>
-  </section>
-
   <section id="view-leads" class="view hidden">
     <div class="toolbar wrap">
       <input id="f-q" placeholder="חיפוש שם / מייל / חברה">
       <select id="f-stage"><option value="">כל השלבים</option></select>
+      <button class="btn" id="f-toggle" type="button" aria-expanded="false" aria-controls="f-more">סינון <span id="f-count" class="badge hidden"></span></button>
+      <button class="btn ghost hidden" id="f-clear" type="button">נקה סינון</button>
+      <span class="spacer"></span>
+      <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
+    </div>
+    <div class="toolbar f-more hidden" id="f-more">
       <details class="ms" id="f-tag" data-all="כל התגיות"><summary>כל התגיות</summary><div class="ms-list"></div></details>
       <select id="f-source"><option value="">כל המקורות</option></select>
       <select id="f-priority"><option value="">כל העדיפויות</option><option>A</option><option>B</option><option>C</option></select>
@@ -115,17 +110,20 @@
       </select>
       <label class="chk"><input type="checkbox" id="f-stale"> מסומנים כרדומים</label>
       <span class="spacer"></span>
-      <select id="bulk-seq"><option value="">הוסף מסומנים לרצף…</option></select>
-      <button class="btn" id="bulk-enroll">הוסף</button>
-      <button class="btn primary" id="bulk-mail">✉ מייל למסומנים</button>
       <button class="btn" id="auto-seg" title="ממלא סוג ליד לפי שם החברה, רק במקום שהוא ריק">🏷 סווג אוטומטית</button>
       <button class="btn" id="split-tags" title="מעביר priority / מדינה / סוג / אתר שנכנסו לתגיות לשדות נפרדים">🧹 פצל תגיות לשדות</button>
+    </div>
+    <div class="toolbar bulkbar hidden" id="bulk-bar">
+      <b id="bulk-n"></b>
+      <button class="btn primary" id="bulk-mail">✉ מייל למסומנים</button>
+      <select id="bulk-seq"><option value="">הוסף לרצף…</option></select>
+      <button class="btn" id="bulk-enroll">הוסף</button>
+      <span class="spacer"></span>
       <button class="btn danger" id="bulk-del">מחק מסומנים</button>
-      <button class="btn primary" data-action="new-lead">+ ליד חדש</button>
     </div>
     <div class="table-wrap">
       <table class="tbl">
-        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>ארגון</th><th>מדינה</th><th>סוג</th><th>תגיות</th><th>אתר</th><th>איש קשר</th><th>למה יקנו</th><th>שלב</th><th>פעילות אחרונה</th><th></th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="sel-all"></th><th>ארגון</th><th>מדינה · סוג</th><th>תגיות</th><th>אתר</th><th>איש קשר</th><th>למה יקנו</th><th>שלב</th><th title="פעילות אחרונה, ומתחתיה המעקב הבא">פעילות · מעקב</th><th></th></tr></thead>
         <tbody id="leads-body"></tbody>
       </table>
     </div>

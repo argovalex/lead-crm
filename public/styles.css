@@ -28,12 +28,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid color-mix(in srgb,var(
 .top .btn.ghost{color:#b9c2bc}
 
 main{padding:16px 20px 40px}
-.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
 .toolbar.wrap{flex-wrap:wrap}
 .toolbar .spacer{flex:1}
 .chk{display:flex;gap:6px;align-items:center;color:var(--muted)}
 
-.board{display:grid;grid-template-columns:repeat(7,minmax(210px,1fr));gap:12px;overflow-x:auto;padding-bottom:8px;min-height:60vh}
 .col{background:#e8eae5;border-radius:var(--radius);display:flex;flex-direction:column;min-height:200px}
 .col.over{outline:2px dashed var(--accent);outline-offset:-4px}
 .col h3{margin:0;padding:10px 12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;border-top:3px solid var(--c);border-radius:var(--radius) var(--radius) 0 0}
@@ -149,18 +148,7 @@ details.dd>summary{cursor:pointer;font-weight:600}
 .fu-item{display:grid;grid-template-columns:minmax(160px,2fr) 150px 150px minmax(120px,2fr) auto;gap:12px;align-items:center;padding:8px 12px;margin-bottom:4px;border-radius:8px}
 .fu-item .c-name{display:flex;flex-direction:column;min-width:0}.fu-item .c-name .muted,.fu-item .c-note{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
 .fu-item .c-fu.over{color:var(--danger)}.fu-item .acts{display:flex;gap:4px;margin:0}.fu-item:hover{background:#f6f8f5}
-.board{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:visible}
-.stage-group{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);border-right:4px solid var(--c)}
-.stage-group summary{cursor:pointer;padding:10px 14px;display:flex;gap:8px;align-items:center;list-style:none}
-.stage-group summary::-webkit-details-marker{display:none}
-.stage-group summary::before{content:"\25B8";color:var(--muted)}.stage-group[open] summary::before{content:"\25BE"}
-.stage-group .count{color:var(--muted);font-weight:400}.stage-group .empty{padding:0 14px 10px;margin:0}
-.lrows{border-top:1px solid var(--line)}
-.lrow{display:grid;grid-template-columns:minmax(150px,2fr) minmax(120px,2fr) 170px 110px minmax(80px,1fr) 110px;gap:10px;align-items:center;padding:6px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}
-.lrow:last-child{border-bottom:0}.lrow:hover{background:#f6f8f5}
-.lrow .c-name,.lrow .c-co,.lrow .c-fu{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lrow .c-fu.over{color:var(--danger)}
-.lrow .flags{margin:0}.lrow select{padding:3px 6px;font-size:12px}
-@media(max-width:900px){.fu-item,.lrow{grid-template-columns:1fr 1fr}.fu-item .c-note,.lrow .c-last,.lrow .c-flags{display:none}}
+@media(max-width:900px){.fu-item{grid-template-columns:1fr 1fr}.fu-item .c-note{display:none}}
 
 /* Mail: conversation list + thread */
 .mail{display:grid;grid-template-columns:340px 1fr;gap:12px;align-items:start}
@@ -187,9 +175,7 @@ details.dd>summary{cursor:pointer;font-weight:600}
 .bub .bs{font-weight:600;margin-bottom:2px}.bub .bb{white-space:pre-wrap;font-size:13px;max-height:260px;overflow:auto;unicode-bidi:plaintext;text-align:start}
 .th-reply{border-top:1px solid var(--line);padding:12px 16px;display:flex;flex-direction:column;gap:8px}
 .th-reply textarea{resize:vertical}.th-reply .logrow{justify-content:space-between;align-items:center}
-.lrow{grid-template-columns:minmax(150px,2fr) minmax(120px,2fr) 170px 110px minmax(80px,1fr) 40px 110px}
-.lrow .c-del{padding:2px 6px}
-@media(max-width:900px){.mail{grid-template-columns:1fr}.mail-list{max-height:260px}.thread{height:auto}.th-body{max-height:50vh}.lrow{grid-template-columns:1fr 1fr}.bub{max-width:94%}}
+@media(max-width:900px){.mail{grid-template-columns:1fr}.mail-list{max-height:260px}.thread{height:auto}.th-body{max-height:50vh}.bub{max-width:94%}}
 
 .rcpts{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
 
@@ -200,4 +186,9 @@ details.dd>summary{cursor:pointer;font-weight:600}
 
 .ms{position:relative;display:inline-block}.ms summary{list-style:none;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--surface);font:inherit;white-space:nowrap}.ms summary::-webkit-details-marker{display:none}.ms summary::after{content:' ▾'}.ms.on summary{border-color:var(--accent,#2563eb);font-weight:600}.ms-list{position:absolute;z-index:30;top:100%;inset-inline-start:0;min-width:180px;max-height:280px;overflow:auto;margin-top:4px;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--surface);box-shadow:0 6px 20px rgba(0,0,0,.15);display:flex;flex-direction:column;gap:2px}.ms-list label{display:flex;gap:6px;align-items:center;padding:4px 6px;cursor:pointer;border-radius:4px}.ms-list label:hover{background:rgba(0,0,0,.05)}
 
-.tbl .c-org{min-width:170px}.tbl .c-org .muted{font-size:12px}.tbl .c-contact{font-size:13px}.tbl .c-why{max-width:300px;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:13px}.tbl td a{color:var(--accent)}.flag.prio-A{background:#e3f1ea;color:#1f6f54}.flag.prio-B{background:#fdf0d8;color:#8a5a12}.flag.prio-C{background:#eee;color:#666}
+.tbl .c-org{min-width:170px}.tbl .c-org .muted{font-size:12px}.tbl .c-contact{font-size:13px}.tbl .c-why{max-width:200px;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:13px}.tbl td a{color:var(--accent)}.flag.prio-A{background:#e3f1ea;color:#1f6f54}.flag.prio-B{background:#fdf0d8;color:#8a5a12}.flag.prio-C{background:#eee;color:#666}
+.tbl select.c-stage{padding:3px 6px;font-size:12px;border-inline-start:4px solid var(--c)}.tbl .c-fu{font-size:12px}.tbl .c-geo .muted{font-size:12px}
+/* Leads toolbar: secondary filters fold away, bulk actions show only while rows are selected */
+.f-more{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px 12px}
+.bulkbar{background:#e6f1eb;border:1px solid #c5ddd0;border-radius:var(--radius);padding:8px 12px;position:sticky;top:60px;z-index:4}
+#f-toggle[aria-expanded="true"]{border-color:var(--ink)}#f-toggle .badge{background:var(--accent)}.tbl .c-fu.over{color:var(--danger)}

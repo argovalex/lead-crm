@@ -68,47 +68,6 @@ function flagsHtml(l) {
   return f.length ? `<div class="flags">${f.join('')}</div>` : '';
 }
 
-// ---------------- Board ----------------
-async function renderBoard() {
-  const q = $('#board-q').value.trim();
-  const rows = await api(`/leads${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-  const board = $('#board');
-  const open = new Set([...board.querySelectorAll('details[open]')].map((d) => d.dataset.stage));
-  const first = !board.children.length;
-  board.innerHTML = STAGES.map((s) => {
-    const items = rows.filter((l) => l.stage === s);
-    const isOpen = first ? !['WON', 'LOST'].includes(s) : open.has(s);
-    return `<details class="stage-group" data-stage="${s}" style="--c:var(--s-${s})" ${isOpen ? 'open' : ''}>
-      <summary><span class="dot"></span><b>${STAGE_LABELS[s]}</b> <span class="count">${items.length}</span></summary>
-      ${items.length ? `<div class="lrows">${items.map((l) => `
-        <div class="lrow" data-id="${l.id}">
-          <span class="c-name"><b>${esc(l.name)}</b></span>
-          <span class="c-co muted">${esc(l.company || l.email)}</span>
-          <span class="c-fu ${fuState(l) === 'over' ? 'over' : 'muted'}">${l.nextFollowUpAt ? `${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}` : ''}</span>
-          <span class="c-last muted" title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}</span>
-          <span class="c-flags">${flagsHtml(l)}</span>
-          <button class="btn sm ghost danger c-del" data-del="${l.id}" data-name="${esc(l.name)}" title="מחיקה" aria-label="מחיקה">🗑</button>
-          <select class="c-stage" aria-label="שלב">${STAGES.map((st) => `<option value="${st}" ${st === l.stage ? 'selected' : ''}>${STAGE_LABELS[st]}</option>`).join('')}</select>
-        </div>`).join('')}</div>` : '<p class="muted empty">אין לידים בשלב</p>'}
-    </details>`;
-  }).join('');
-
-  board.querySelectorAll('.lrow').forEach((r) => r.addEventListener('click', (e) => {
-    if (e.target.closest('select')) return;
-    const d = e.target.closest('[data-del]');
-    if (d) return confirmDelete([+d.dataset.del], d.dataset.name);
-    openLead(+r.dataset.id);
-  }));
-  board.querySelectorAll('.c-stage').forEach((sel) => sel.addEventListener('change', async () => {
-    const id = sel.closest('.lrow').dataset.id;
-    try {
-      await api(`/leads/${id}/stage`, { method: 'POST', body: { stage: sel.value } });
-      toast(`הועבר ל"${STAGE_LABELS[sel.value]}"`);
-    } catch (err) { fail(err); }
-    renderBoard();
-  }));
-}
-
 // ---------------- Leads table ----------------
 async function renderLeads() {
   const p = new URLSearchParams();
@@ -125,27 +84,66 @@ async function renderLeads() {
   if ($('#f-stale').checked) p.set('stale', 'true');
   const rows = await api(`/leads?${p}`);
   const host = (u) => String(u || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
+  // Keep the selection across re-renders (a filter change or the 60s auto refresh).
+  const picked = new Set([...document.querySelectorAll('.sel:checked')].map((c) => c.value));
   $('#leads-body').innerHTML = rows.length ? rows.map((l) => `
     <tr data-id="${l.id}" data-name="${esc(l.name)}">
-      <td><input type="checkbox" class="sel" value="${l.id}"></td>
+      <td><input type="checkbox" class="sel" value="${l.id}" ${picked.has(String(l.id)) ? 'checked' : ''}></td>
       <td class="c-org"><b>${esc(l.company || l.name)}</b>${l.company && l.company !== l.name ? `<div class="muted">${esc(l.name)}</div>` : ''}</td>
-      <td>${esc(l.country)}</td>
-      <td>${esc(l.segment)}</td>
+      <td class="c-geo">${esc(l.country)}${l.segment ? `<div class="muted">${esc(l.segment)}</div>` : ''}</td>
       <td>${(l.tags || []).map((t) => `<span class="flag">${esc(t)}</span>`).join(' ')}</td>
       <td>${l.website ? `<a href="${esc(/^https?:/i.test(l.website) ? l.website : `https://${l.website}`)}" target="_blank" rel="noopener" dir="ltr">${esc(host(l.website))}</a>` : ''}</td>
       <td class="c-contact" dir="ltr"><div>${esc(l.email)}</div>${l.phone ? `<div class="muted">${esc(l.phone)}</div>` : ''}</td>
       <td class="c-why" title="${esc(l.notes)}">${esc(l.notes)}</td>
-      <td><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span></td>
-      <td title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}${l.stale ? ' <span class="flag warn">רדום</span>' : ''}</td>
+      <td><select class="c-stage" aria-label="שלב" style="--c:var(--s-${l.stage})">${STAGES.map((st) => `<option value="${st}" ${st === l.stage ? 'selected' : ''}>${STAGE_LABELS[st]}</option>`).join('')}</select></td>
+      <td title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}${l.stale ? ' <span class="flag warn">רדום</span>' : ''}${l.nextFollowUpAt ? `<div class="c-fu ${fuState(l) === 'over' ? 'over' : 'muted'}">${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}</div>` : ''}</td>
       <td><button class="btn sm ghost danger" data-del="${l.id}" data-name="${esc(l.name)}" title="מחיקה" aria-label="מחיקה">🗑</button></td>
-    </tr>`).join('') : '<tr><td colspan="12" class="muted">אין לידים תואמים</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="10" class="muted">אין לידים תואמים</td></tr>';
+  updateLeadsBar();
   $('#leads-body').querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', (e) => {
-    if (e.target.matches('input')) return;
+    if (e.target.matches('input') || e.target.closest('select')) return;
     const d = e.target.closest('[data-del]');
     if (d) return confirmDelete([+d.dataset.del], d.dataset.name);
     openLead(+tr.dataset.id);
   }));
+  // Stage is changed in place (this replaced the separate board view).
+  $('#leads-body').querySelectorAll('.c-stage').forEach((sel) => sel.addEventListener('change', async () => {
+    try {
+      await api(`/leads/${sel.closest('tr').dataset.id}/stage`, { method: 'POST', body: { stage: sel.value } });
+      toast(`הועבר ל"${STAGE_LABELS[sel.value]}"`);
+    } catch (err) { fail(err); }
+    renderLeads();
+  }));
 }
+
+// Leads toolbar state: how many secondary filters are on, and the bulk bar for selected rows.
+const MORE_FILTERS = ['#f-tag', '#f-source', '#f-priority', '#f-segment', '#f-country', '#f-inactive', '#f-activity'];
+function updateLeadsBar() {
+  const on = MORE_FILTERS.filter((s) => $(s).value).length + ($('#f-stale').checked ? 1 : 0);
+  $('#f-count').textContent = on;
+  $('#f-count').classList.toggle('hidden', !on);
+  $('#f-clear').classList.toggle('hidden', !on && !$('#f-q').value && !$('#f-stage').value);
+  const boxes = [...document.querySelectorAll('.sel')];
+  const n = boxes.filter((c) => c.checked).length;
+  $('#bulk-n').textContent = `${n} מסומנים`;
+  $('#bulk-bar').classList.toggle('hidden', !n);
+  $('#sel-all').checked = n > 0 && n === boxes.length;
+}
+$('#f-toggle').onclick = () => {
+  const open = $('#f-more').classList.toggle('hidden') === false;
+  $('#f-toggle').setAttribute('aria-expanded', String(open));
+};
+$('#f-clear').onclick = () => {
+  ['#f-q', '#f-stage', '#f-source', '#f-priority', '#f-inactive', '#f-activity'].forEach((s) => { $(s).value = ''; });
+  $('#f-stale').checked = false;
+  ['#f-tag', '#f-segment', '#f-country'].forEach((s) => {
+    $(s).querySelectorAll('input:checked').forEach((c) => { c.checked = false; });
+    $(s).querySelector('summary').textContent = $(s).dataset.all;
+    $(s).classList.remove('on');
+  });
+  renderLeads();
+};
+$('#view-leads').addEventListener('change', (e) => { if (e.target.matches('.sel, #sel-all')) updateLeadsBar(); });
 
 // Multi-select dropdown: <details class="ms">; .value is the checked values joined by commas.
 function msInit(sel) {
@@ -185,7 +183,7 @@ async function loadMeta() {
 // ---------------- Routing ----------------
 // The address is #/<view> or #/<view>/lead/<id>, so Back/Forward, reload and bookmarks all work.
 // Opening a view or a lead adds a history entry; closing the drawer replaces it.
-let view = 'board';
+let view = 'followups';
 let drawerLead = null;
 function setHash(h, replace) {
   if (location.hash === h) return;
@@ -835,11 +833,13 @@ $('#set-prev').onclick = async () => {
 };
 
 // ---------------- Wiring ----------------
-const views = { mail: renderMail, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {}, gmdss: async () => { const f = $('#gmdss-frame'); if (!f.getAttribute('src')) f.src = '/gmdss?embed=1'; } };
+const views = { mail: renderMail, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {}, gmdss: async () => { const f = $('#gmdss-frame'); if (!f.getAttribute('src')) f.src = '/gmdss?embed=1'; } };
 function refreshView() { views[view]().catch(fail); }
 function routeOf() {
   const m = location.hash.match(/^#\/([a-z]+)(?:\/lead\/(\d+))?$/);
-  return m && views[m[1]] ? { view: m[1], lead: m[2] ? +m[2] : null } : null;
+  if (!m) return null;
+  const v = m[1] === 'board' ? 'leads' : m[1]; // the board view was merged into the leads table
+  return views[v] ? { view: v, lead: m[2] ? +m[2] : null } : null;
 }
 // Back/Forward or a hand-edited address: bring the screen in line with the hash.
 window.addEventListener('hashchange', () => {
@@ -854,7 +854,8 @@ window.addEventListener('hashchange', () => {
 function show(v, replace) {
   view = v;
   const r = routeOf();
-  if (!r || r.view !== v) setHash(`#/${v}`, replace); // same view: keep a /lead/<id> suffix intact
+  // Same view: keep a /lead/<id> suffix intact. An old alias (#/board) is rewritten to the real view.
+  if (!r || r.view !== v || !location.hash.startsWith(`#/${v}`)) setHash(`#/${v}`, replace);
   document.querySelectorAll('.view').forEach((el) => el.classList.toggle('hidden', el.id !== `view-${v}`));
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
   try { localStorage.setItem('crm.view', v); } catch { /* storage unavailable */ }
@@ -912,7 +913,7 @@ $('#bulk-del').onclick = () => {
   confirmDelete(ids, `${ids.length} לידים`);
 };
 let deb;
-['#board-q', '#f-q'].forEach((s) => $(s).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refreshView, 250); }));
+['#f-q'].forEach((s) => $(s).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refreshView, 250); }));
 ['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country', '#f-activity', '#f-segment'].forEach((s) => $(s).addEventListener('change', renderLeads));
 $('#sel-all').onchange = (e) => document.querySelectorAll('.sel').forEach((c) => { c.checked = e.target.checked; });
 $('#bulk-enroll').onclick = async () => {
@@ -935,7 +936,8 @@ $('#bulk-enroll').onclick = async () => {
   api('/mailbox').then((rows) => { const n = rows.filter((r) => r.awaiting).length; const b = $('#mail-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   let saved = 'followups';
-  try { saved = localStorage.getItem('crm.view') || 'board'; } catch { /* ignore */ }
+  try { saved = localStorage.getItem('crm.view') || 'followups'; } catch { /* ignore */ }
+  if (saved === 'board') saved = 'leads';
   const route = routeOf();
   show(route ? route.view : (views[saved] ? saved : 'followups'), true);
   if (route && route.lead) openLead(route.lead, true).catch(fail);
