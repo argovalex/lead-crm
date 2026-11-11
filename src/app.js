@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
@@ -22,6 +23,34 @@ function createApp() {
   const app = express();
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
+
+  // ---- Security headers ----
+  // Scripts only from this origin (no inline <script>, no inline handlers). Inline style attributes are
+  // used all over the UI, so styles stay 'unsafe-inline'. Email previews render in srcdoc iframes, which
+  // inherit this policy: they need remote images (signature, video thumbnails) but never scripts.
+  const CSP = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "connect-src 'self'",
+    "frame-src 'self'",
+    "frame-ancestors 'self'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join('; ');
+  app.use((_req, res, next) => {
+    res.set({
+      'Content-Security-Policy': CSP,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN', // the GMDSS view is a same-origin iframe
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    });
+    if (config.isProd) res.set('Strict-Transport-Security', 'max-age=31536000');
+    next();
+  });
 
   app.get('/healthz', async (_req, res) => {
     await prisma.$queryRaw`SELECT 1`;
@@ -111,7 +140,33 @@ function createApp() {
   app.use('/api/gmdss', requireAuth, gmdssApi);
   app.use('/api', requireAuth, api);
 
-  app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+  // ---- Static assets ----
+  // Pages are always revalidated. Their JS/CSS references get a content hash (?v=...), and a request
+  // carrying one is cached for a year: a deploy that changes a file changes its URL.
+  const pub = path.join(__dirname, '..', 'public');
+  const hashMemo = new Map();
+  const assetVersion = (file) => {
+    const full = path.join(pub, file);
+    const { mtimeMs } = fs.statSync(full);
+    const m = hashMemo.get(file);
+    if (m && m.mtimeMs === mtimeMs) return m.v;
+    const v = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex').slice(0, 10);
+    hashMemo.set(file, { mtimeMs, v });
+    return v;
+  };
+  const sendPage = (file) => (_req, res) => {
+    const html = fs.readFileSync(path.join(pub, file), 'utf8')
+      .replace(/(href|src)="\/([\w.-]+\.(?:js|css))"/g, (_m, attr, f) => `${attr}="/${f}?v=${assetVersion(f)}"`);
+    res.set('Cache-Control', 'no-cache').type('html').send(html);
+  };
+  app.get(['/', '/index.html'], sendPage('index.html'));
+  app.get(['/login', '/login.html'], sendPage('login.html'));
+  app.get(['/gmdss', '/gmdss.html'], sendPage('gmdss.html'));
+  app.use((req, res, next) => {
+    if (req.query.v && /\.(js|css)$/.test(req.path)) res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    next();
+  });
+  app.use(express.static(pub, { extensions: ['html'] }));
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {

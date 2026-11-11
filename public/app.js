@@ -182,14 +182,29 @@ async function loadMeta() {
 }
 
 // ---------------- Lead drawer ----------------
-function closeDrawer() { $('#drawer').classList.add('hidden'); $('#scrim').classList.add('hidden'); }
+// ---------------- Routing ----------------
+// The address is #/<view> or #/<view>/lead/<id>, so Back/Forward, reload and bookmarks all work.
+// Opening a view or a lead adds a history entry; closing the drawer replaces it.
+let view = 'board';
+let drawerLead = null;
+function setHash(h, replace) {
+  if (location.hash === h) return;
+  if (replace) history.replaceState(null, '', h); else location.hash = h;
+}
+
+function closeDrawer() {
+  $('#drawer').classList.add('hidden'); $('#scrim').classList.add('hidden');
+  if (drawerLead !== null) { drawerLead = null; setHash(`#/${view}`, true); }
+}
 
 const NEXT_ACTIONS = ['שיחת טלפון', 'שליחת מייל', 'פגישה', 'לשלוח הצעה', 'מעקב', 'להשיב'];
 const NEXT_ICON = (a) => (/טלפון|שיחה/.test(a || '') ? '☎' : /פגישה/.test(a || '') ? '🤝' : /מייל|להשיב|הצעה/.test(a || '') ? '✉' : '⏰');
 const isCallAction = (a) => /טלפון|שיחה/.test(a || '');
 
-async function openLead(id) {
+async function openLead(id, replace) {
   const l = await api(`/leads/${id}`);
+  drawerLead = id;
+  setHash(`#/${view}/lead/${id}`, replace);
   const actText = (a) => {
     const d = a.data || {};
     if (a.type === 'STAGE_CHANGED') return `${STAGE_LABELS[d.from]} ← ${STAGE_LABELS[d.to]} <span class="muted">(${REASONS[d.reason] || esc(d.reason)})</span>`;
@@ -820,11 +835,26 @@ $('#set-prev').onclick = async () => {
 };
 
 // ---------------- Wiring ----------------
-let view = 'board';
 const views = { mail: renderMail, followups: renderFollowups, outbox: renderOutbox, settings: renderSettings, board: renderBoard, leads: renderLeads, sequences: renderSequences, stats: renderStats, import: async () => {}, gmdss: async () => { const f = $('#gmdss-frame'); if (!f.getAttribute('src')) f.src = '/gmdss?embed=1'; } };
 function refreshView() { views[view]().catch(fail); }
-function show(v) {
+function routeOf() {
+  const m = location.hash.match(/^#\/([a-z]+)(?:\/lead\/(\d+))?$/);
+  return m && views[m[1]] ? { view: m[1], lead: m[2] ? +m[2] : null } : null;
+}
+// Back/Forward or a hand-edited address: bring the screen in line with the hash.
+window.addEventListener('hashchange', () => {
+  const r = routeOf();
+  if (!r) return;
+  if (r.view !== view) show(r.view, true);
+  if (r.lead !== drawerLead) {
+    if (r.lead) openLead(r.lead, true).catch(fail);
+    else { drawerLead = null; closeDrawer(); }
+  }
+});
+function show(v, replace) {
   view = v;
+  const r = routeOf();
+  if (!r || r.view !== v) setHash(`#/${v}`, replace); // same view: keep a /lead/<id> suffix intact
   document.querySelectorAll('.view').forEach((el) => el.classList.toggle('hidden', el.id !== `view-${v}`));
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
   try { localStorage.setItem('crm.view', v); } catch { /* storage unavailable */ }
@@ -906,6 +936,8 @@ $('#bulk-enroll').onclick = async () => {
   api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   let saved = 'followups';
   try { saved = localStorage.getItem('crm.view') || 'board'; } catch { /* ignore */ }
-  show(views[saved] ? saved : 'followups');
+  const route = routeOf();
+  show(route ? route.view : (views[saved] ? saved : 'followups'), true);
+  if (route && route.lead) openLead(route.lead, true).catch(fail);
   setInterval(() => { if (!document.hidden && !$('#modal').open && $('#drawer').classList.contains('hidden')) refreshView(); }, 60000);
 }());

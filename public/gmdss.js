@@ -83,7 +83,7 @@ function cell(l, k) {
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
-  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}" onclick="return false">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="Replied">↩</span>' : ''}</div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
+  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="Replied">↩</span>' : ''}</div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
   if (k === 'followUpAt') { const due = new Date(v) <= new Date(); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'Follow-up due' : 'Follow-up'}">${esc(new Date(v).toISOString().slice(0, 10))}</span>`; }
   if (k === 'priority') return `<span class="pb ${esc(v)}">${esc(v)}</span>`;
   if (k === 'website') return `<a href="${esc(v)}" target="_blank" rel="noopener noreferrer">${esc(v.replace(/^https?:\/\/(www\.)?/, ''))}</a>`;
@@ -425,7 +425,7 @@ $('#tbl').addEventListener('click', (e) => {
   if (th) { sortDir = sortKey === th.dataset.k ? -sortDir : 1; sortKey = th.dataset.k; render(); return; }
   if (e.target.id === 'chk-page') { filtered().filter((l) => l.email).forEach((l) => (e.target.checked ? selected.add(l.id) : selected.delete(l.id))); render(); return; }
   const cb = e.target.closest('[data-card]');
-  if (cb) { openCard(+cb.dataset.card); return; }
+  if (cb) { e.preventDefault(); openCard(+cb.dataset.card); return; }
   const eb = e.target.closest('[data-edit]');
   if (eb) { editLead(+eb.dataset.edit); return; }
   if (e.target.classList.contains('rc')) {
