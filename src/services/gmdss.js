@@ -84,12 +84,35 @@ function merge(tpl, lead) {
 const logActivity = (prisma, leadId, type, detail, at) =>
   prisma.gmdssActivity.create({ data: { leadId, type, detail: detail ? String(detail).slice(0, type === 'replied' || type === 'reply_sent' ? 6000 : 1000) : null, ...(at ? { createdAt: at } : {}) } });
 
-// An inbound reply from a GMDSS lead's address: mark the lead and add it to the timeline.
+// Mail from these providers says nothing about the organization, so a domain match would be a guess.
+const FREE_MAIL = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk', 'ymail.com', 'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com', 'msn.com',
+  'icloud.com', 'me.com', 'aol.com', 'gmx.com', 'gmx.de', 'proton.me', 'protonmail.com', 'mail.com', 'zoho.com', 'yandex.com', 'walla.co.il', 'bezeqint.net', 'orange.fr', 'free.fr', 'wanadoo.fr', 'btinternet.com', 'sky.com', 'bigpond.com', 'optusnet.com.au']);
+
+// Which GMDSS lead does an inbound reply belong to?
+// 1. The exact address we mailed. 2. Someone else at the same organization (same domain, not a free-mail
+// provider): the lead we emailed most recently on that domain, since that is the mail being answered.
+// Returns { lead, exact } or null.
+async function findReplyLead(prisma, email) {
+  const addr = String(email || '').trim().toLowerCase();
+  const exact = await prisma.gmdssLead.findFirst({ where: { email: { equals: addr, mode: 'insensitive' } } });
+  if (exact) return { lead: exact, exact: true };
+  const domain = addr.split('@')[1];
+  if (!domain || FREE_MAIL.has(domain)) return null;
+  const same = await prisma.gmdssLead.findMany({ where: { email: { endsWith: `@${domain}`, mode: 'insensitive' }, lastEmailedAt: { not: null } } });
+  if (!same.length) return null;
+  same.sort((a, b) => new Date(b.lastEmailedAt) - new Date(a.lastEmailedAt));
+  return { lead: same[0], exact: false };
+}
+
+// An inbound reply for a GMDSS lead: mark the lead and add it to the timeline.
 async function logReply(prisma, email, subject, body, now = new Date()) {
-  const l = await prisma.gmdssLead.findFirst({ where: { email: { equals: String(email).toLowerCase(), mode: 'insensitive' } } });
-  if (!l) return false;
+  const m = await findReplyLead(prisma, email);
+  if (!m) return false;
+  const { lead: l, exact } = m;
   await prisma.gmdssLead.update({ where: { id: l.id }, data: { repliedAt: now } });
-  await logActivity(prisma, l.id, 'replied', `${subject || ''}${body ? `\n${String(body).slice(0, 5000)}` : ''}`.trim(), now);
+  // A reply from a different address says so in the timeline, so it is never mistaken for the lead's own.
+  const text = `${exact ? '' : `[מאת ${email}, לא הכתובת שאליה נשלח המייל]\n`}${body ? String(body).slice(0, 5000) : ''}`.trim();
+  await logActivity(prisma, l.id, 'replied', `${subject || ''}${text ? `\n${text}` : ''}`.trim(), now);
   return true;
 }
 
@@ -133,4 +156,4 @@ async function handleGmdssEvent(prisma, event, now = new Date()) {
   return true;
 }
 
-module.exports = { handleGmdssEvent, logActivity, logReply, syncReplies, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
