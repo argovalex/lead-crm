@@ -119,7 +119,7 @@ function render() {
   $('#tbl thead').innerHTML = `<tr><th><input type="checkbox" id="chk-page" title="בחר את המוצגים"></th>${COLS.map(([k, h]) =>
     `<th data-k="${k}" title="${k === 'engagement' ? 'נמסר = המייל הגיע לתיבה. נפתח = הנמען פתח אותו. הקלקה = לחץ על קישור או סרטון' : ''}">${h}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>`;
   $('#tbl tbody').innerHTML = rows.map((l) => `<tr class="p-${esc(l.priority || '')}">
-    <td><input type="checkbox" class="rc" data-id="${l.id}" ${selected.has(l.id) ? 'checked' : ''} ${l.email ? '' : 'disabled title="אין אימייל"'}></td>
+    <td><input type="checkbox" class="rc" data-id="${l.id}" ${selected.has(l.id) ? 'checked' : ''} ${l.email ? '' : 'title="אין אימייל: אפשר למחוק או לערוך, אי אפשר לשלוח"'}></td>
     ${COLS.map(([k]) => `<td>${cell(l, k)}</td>`).join('')}</tr>`).join('')
     || `<tr><td colspan="${COLS.length + 1}" class="muted">אין תוצאות</td></tr>`;
   $('#count').textContent = rows.length === leads.length ? leads.length : `${rows.length} מתוך ${leads.length}`;
@@ -159,7 +159,7 @@ function fillFilters() {
 async function load() {
   [leads, templates] = await Promise.all([api('/leads'), api('/templates')]);
   fillFilters();
-  for (const id of [...selected]) { const l = leads.find((x) => x.id === id); if (!l || !l.email) selected.delete(id); }
+  for (const id of [...selected]) { const l = leads.find((x) => x.id === id); if (!l) selected.delete(id); }
   render();
 }
 
@@ -284,9 +284,10 @@ function openAttach() {
 // ---------- Send dialog ----------
 function openSend() {
   if (!templates.length) { toast('צור תבנית קודם', true); openTemplates(); return; }
-  const ids = [...selected];
+  const ids = [...selected].filter((id) => { const l = leads.find((x) => x.id === id); return l && l.email; });
+  if (!ids.length) { toast('לאף ליד מסומן אין מייל', true); return; }
   const first = leads.find((l) => l.id === ids[0]);
-  const common = leads.filter((l) => selected.has(l.id)).map((l) => l.templateId);
+  const common = leads.filter((l) => ids.includes(l.id)).map((l) => l.templateId);
   const pre = common.every((t) => t === common[0]) && common[0] ? common[0] : templates[0].id;
   dlgOpen(`<h3 style="margin-top:0">שליחת מייל · ${ids.length} לידים</h3>
     ${emailConfigured ? '' : '<p class="warn">שליחה לא מוגדרת בשרת. תצוגה מקדימה זמינה, שליחה תיכשל עם הודעת הגדרה.</p>'}
@@ -350,6 +351,11 @@ $('#f-toggle').onclick = () => {
 $('#kpis').onclick = (e) => { const k = e.target.closest('[data-eng]'); if (k) { $('#f-eng').value = k.dataset.eng; render(); } };
 $('#sel-none').onclick = () => { selected.clear(); render(); };
 $('#send').onclick = openSend;
+$('#bulk-del').onclick = async () => {
+  const ids = [...selected];
+  if (!ids.length || !confirm(`למחוק לצמיתות ${ids.length} לידים וכל ההיסטוריה שלהם? אי אפשר לשחזר.`)) return;
+  try { const r = await api('/leads/delete', { method: 'POST', body: { ids } }); selected.clear(); await load(); toast(`${r.deleted} לידים נמחקו`); } catch (e) { toast(e.message, true); }
+};
 $('#attach').onclick = openAttach;
 $('#tpls').onclick = () => openTemplates();
 $('#refresh').onclick = () => load().catch((e) => toast(e.message, true));
@@ -559,7 +565,7 @@ function editLead(id) {
 $('#tbl').addEventListener('click', (e) => {
   const th = e.target.closest('th[data-k]');
   if (th) { sortDir = sortKey === th.dataset.k ? -sortDir : 1; sortKey = th.dataset.k; render(); return; }
-  if (e.target.id === 'chk-page') { filtered().filter((l) => l.email).forEach((l) => (e.target.checked ? selected.add(l.id) : selected.delete(l.id))); render(); return; }
+  if (e.target.id === 'chk-page') { filtered().forEach((l) => (e.target.checked ? selected.add(l.id) : selected.delete(l.id))); render(); return; }
   const cb = e.target.closest('[data-card]');
   if (cb) { e.preventDefault(); openCard(+cb.dataset.card); return; }
   const eb = e.target.closest('[data-edit]');
