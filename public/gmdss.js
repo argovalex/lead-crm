@@ -16,7 +16,7 @@ const COLS = [
 const STATUS = { not_sent: 'לא נשלח', queued: 'בתור', sent: 'נשלח', failed: 'נכשל', bounced: 'חזר' };
 const FIT = { Course: 'קורס', Simulator: 'סימולטור', Both: 'שניהם' };
 const dayHe = (d) => new Date(d).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' });
-const isDue = (l) => !!(l.followUpAt && new Date(l.followUpAt) <= new Date());
+const isDue = (l) => !!(!l.closedAt && l.followUpAt &&new Date(l.followUpAt) <= new Date());
 // Email-status filter. The summary chips above the table use the same predicates.
 const ENG = {
   sent: (l) => l.emailStatus === 'sent',
@@ -29,8 +29,10 @@ const ENG = {
   reminded: (l) => (l.reminderCount || 0) > 0,
   manualRem: (l) => !!l.manualReminderAt,
   followup: isDue,
+  closed: (l) => !!l.closedAt,
+  open: (l) => !l.closedAt,
 };
-const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום']];
+const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['closed', 'סגורים']];
 const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template'];
 const LTR = new Set();
 const TEXT = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
@@ -107,6 +109,7 @@ function cell(l, k) {
     const tag = (cls, txt, title) => ` <span class="st ${cls}" title="${esc(title)}">${txt}</span>`;
     return `<a href="#" class="stlink" data-card="${l.id}" title="פתיחת כרטיס הליד"><span class="st ${esc(v)}" ${l.lastError ? `title="${esc(l.lastError)}"` : ''}>${esc(STATUS[v] || v)}</span>`
       + `${l.reminderCount ? tag('', `🔔 תזכורת ${l.reminderCount}${l.manualReminderAt ? ' ידנית' : ''}`, `תזכורות שנשלחו: ${l.reminderCount}${l.lastReminderAt ? ` (אחרונה ${fmt(l.lastReminderAt)})` : ''}`) : ''}`
+      + `${l.closedAt ? tag('failed', '⛔ סגור', `נסגר ${fmt(l.closedAt)}. אין תזכורות ושליחות.`) : ''}`
       + `${l.answeredAt ? tag('sent', 'נענה ✓', `שלחנו לו תשובה ${fmt(l.answeredAt)}`) : ''}`
       + `${l.repliedAt ? tag('sent', '↩ השיב', `השיב ${fmt(l.repliedAt)}`) : ''}</a>`;
   }
@@ -351,6 +354,11 @@ $('#f-toggle').onclick = () => {
 $('#kpis').onclick = (e) => { const k = e.target.closest('[data-eng]'); if (k) { $('#f-eng').value = k.dataset.eng; render(); } };
 $('#sel-none').onclick = () => { selected.clear(); render(); };
 $('#send').onclick = openSend;
+$('#bulk-close').onclick = async () => {
+  const ids = [...selected];
+  if (!ids.length || !confirm(`לסגור ${ids.length} לידים? לא יישלחו אליהם תזכורות או מיילים. אפשר לפתוח מחדש מהכרטיס.`)) return;
+  try { const r = await api('/leads/close', { method: 'POST', body: { ids, closed: true } }); selected.clear(); await load(); toast(`${r.updated} לידים נסגרו`); } catch (e) { toast(e.message, true); }
+};
 $('#bulk-del').onclick = async () => {
   const ids = [...selected];
   if (!ids.length || !confirm(`למחוק לצמיתות ${ids.length} לידים וכל ההיסטוריה שלהם? אי אפשר לשחזר.`)) return;
@@ -374,7 +382,7 @@ $('#imp-file').onchange = async (e) => {
 const ACT = {
   sent: ['✉', 'מייל נשלח'], delivered: ['✓', 'נמסר'], opened: ['👁', 'נפתח'], clicked: ['↗', 'הקלקה על קישור'],
   bounced: ['⚠', 'חזר'], failed: ['⚠', 'השליחה נכשלה'], replied: ['↩', 'השיב'], template: ['▤', 'תבנית'],
-  edited: ['✎', 'הליד נערך'], email_changed: ['✎', 'המייל שונה'], follow_up: ['⏰', 'מעקב'], note: ['📝', 'הערה'], reply_sent: ['↪', 'תשובה נשלחה'], reminder: ['🔔', 'תזכורת נשלחה'], code_sent: ['🔑', 'קוד גישה נשלח'],
+  edited: ['✎', 'הליד נערך'], email_changed: ['✎', 'המייל שונה'], follow_up: ['⏰', 'מעקב'], note: ['📝', 'הערה'], reply_sent: ['↪', 'תשובה נשלחה'], reminder: ['🔔', 'תזכורת נשלחה'], code_sent: ['🔑', 'קוד גישה נשלח'], closed: ['⛔', 'הליד נסגר'], reopened: ['↺', 'הליד נפתח מחדש'],
 };
 async function openCard(id) {
   const l = leads.find((x) => x.id === id);
@@ -389,7 +397,7 @@ async function openCard(id) {
   const row = ([h, v]) => (v ? `<div style="display:flex;gap:8px"><span class="muted" style="min-width:110px">${h}</span><span dir="ltr">${esc(v)}</span></div>` : '');
   dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
       <h3 style="margin:0">${esc(l.organization)} ${l.priority ? `<span class="pb ${esc(l.priority)}">${esc(l.priority)}</span>` : ''}</h3>
-      <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-del" style="color:#b91c1c">🗑 מחיקה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
+      <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-close-lead">${l.closedAt ? '↺ פתיחה מחדש' : '⛔ סגירה ועצירה'}</button> <button class="btn sm" id="cd-del" style="color:#b91c1c">🗑 מחיקה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
     <div style="margin:8px 0;display:grid;gap:3px;font-size:13px">
       ${[['מדינה', l.country], ['סוג', l.segment], ['התאמת מוצר', FIT[l.productFit] || l.productFit], ['אתר', l.website], ['מייל', l.email], ['טלפון', l.phone],
         ['למה יקנו', l.whyTheydBuy], ['תבנית', l.template && l.template.name], ['סטטוס מייל', STATUS[l.emailStatus] || l.emailStatus],
@@ -401,7 +409,7 @@ async function openCard(id) {
       <button class="btn sm" id="cd-fu-clear">ניקוי</button>
     </div>
     <div class="toolbar wrap" style="margin:6px 0">
-      <button class="btn sm" id="cd-remind" ${l.email && !l.repliedAt ? '' : 'disabled'}>🔔 שלח תזכורת עכשיו</button>
+      <button class="btn sm" id="cd-remind" ${l.email && !l.repliedAt && !l.closedAt ? '' : 'disabled'}>🔔 שלח תזכורת עכשיו</button>
       <button class="btn sm" id="cd-code" ${l.email ? '' : 'disabled'}>🔑 שלח קוד גישה</button>
     </div>
     <h4 style="margin:12px 0 6px">תשובה</h4>
@@ -425,6 +433,11 @@ async function openCard(id) {
   $('#cd-close').onclick = dlgClose;
   $('#cd-edit').onclick = () => editLead(id);
   $('#cd-del').onclick = () => deleteLead(id);
+  $('#cd-close-lead').onclick = async () => {
+    const closing = !l.closedAt;
+    if (closing && !confirm(`לסגור את "${l.organization}"? לא יישלחו אליו תזכורות או מיילים. אפשר לפתוח מחדש.`)) return;
+    try { await api('/leads/close', { method: 'POST', body: { ids: [id], closed: closing } }); await load(); toast(closing ? 'הליד נסגר' : 'הליד נפתח מחדש'); openCard(id); } catch (e) { toast(e.message, true); }
+  };
   const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('נשמר'); openCard(id); } catch (e) { toast(e.message, true); } };
   $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);
   $('#cd-fu-clear').onclick = () => saveFu(null);

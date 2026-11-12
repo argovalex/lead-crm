@@ -69,7 +69,7 @@ table.g tr.p-A{background:#fdf3f3}table.g tr.p-B{background:#fdf8ec}
     <select id="f-eng" aria-label="סטטוס מייל">
       <option value="">כל סטטוסי המייל</option><option value="sent">נשלח</option><option value="opened">נפתח</option>
       <option value="clicked">הקליק על קישור</option><option value="unopened">נשלח ולא נפתח</option><option value="failed">נכשל / חזר</option>
-      <option value="replied">השיב</option><option value="answered">נענו (שלחנו תשובה)</option><option value="reminded">קיבלו תזכורת</option><option value="manualRem">תזכורת ידנית</option><option value="followup">מעקב להיום</option>
+      <option value="replied">השיב</option><option value="answered">נענו (שלחנו תשובה)</option><option value="reminded">קיבלו תזכורת</option><option value="manualRem">תזכורת ידנית</option><option value="followup">מעקב להיום</option><option value="closed">סגורים</option><option value="open">פתוחים (לא סגורים)</option>
     </select>
     <button class="btn" id="f-toggle" type="button" aria-expanded="false" aria-controls="f-more">סינון <span id="f-count" class="badge hidden"></span></button>
     <button class="btn ghost hidden" id="reset" type="button">נקה סינון</button>
@@ -85,6 +85,7 @@ table.g tr.p-A{background:#fdf3f3}table.g tr.p-B{background:#fdf8ec}
     <b id="sel-n"></b>
     <button class="btn primary" id="send">✉ שליחת מייל</button>
     <button class="btn" id="attach">שיוך תבנית</button>
+    <button class="btn" id="bulk-close">⛔ סגירה ועצירה</button>
     <button class="btn" id="bulk-del" style="color:#b91c1c">🗑 מחיקה</button>
     <span class="spacer"></span>
     <button class="btn ghost" id="sel-none">נקה בחירה</button>

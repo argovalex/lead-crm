@@ -51,6 +51,18 @@ router.get('/leads', wrap(async (_req, res) => {
 
 // Edit a lead. Changing the email address resets the send state so the corrected address can be mailed again.
 const EDITABLE = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority'];
+// Close (stop) or reopen leads: closed leads get no reminders and are skipped by mass sends.
+router.post('/leads/close', wrap(async (req, res) => {
+  const ids = ((req.body && req.body.ids) || []).map(Number).filter(Number.isInteger);
+  if (!ids.length) throw bad('no_leads_selected');
+  const closed = !(req.body && req.body.closed === false);
+  const rows = await prisma.gmdssLead.findMany({ where: { id: { in: ids }, closedAt: closed ? null : { not: null } }, select: { id: true } });
+  const now = new Date();
+  await prisma.gmdssLead.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { closedAt: closed ? now : null, ...(closed ? { followUpAt: null } : {}) } });
+  for (const r of rows) await logActivity(prisma, r.id, closed ? 'closed' : 'reopened', closed ? 'הליד נסגר. תזכורות ושליחות הופסקו.' : 'הליד נפתח מחדש.');
+  res.json({ updated: rows.length });
+}));
+
 router.post('/leads/delete', wrap(async (req, res) => {
   const ids = ((req.body && req.body.ids) || []).map(Number).filter(Number.isInteger);
   if (!ids.length) throw bad('no_leads_selected');
@@ -257,7 +269,7 @@ router.post('/send', wrap(async (req, res) => {
   if (sending) throw bad('send_in_progress', 409);
 
   const rows = await prisma.gmdssLead.findMany({ where: { id: { in: ids.map(Number).filter(Number.isInteger) } }, orderBy: { id: 'asc' } });
-  const eligible = rows.filter((l) => l.email && EMAIL_RE.test(l.email) && (includeSent || l.emailStatus !== 'sent'));
+  const eligible = rows.filter((l) => l.email && EMAIL_RE.test(l.email) && (includeSent || l.emailStatus !== 'sent') && !l.closedAt);
   if (!eligible.length) throw bad('nothing_to_send');
   const skipped = rows.length - eligible.length;
 

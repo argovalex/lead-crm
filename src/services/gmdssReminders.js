@@ -38,7 +38,7 @@ const segmentOf = (l) => (l.clickCount > 0 ? 'hot' : l.openCount > 0 ? 'warm' : 
 function dueInfo(l, now = new Date()) {
   if (!l.email || !EMAIL_RE.test(l.email)) return null;
   if (l.emailStatus !== 'sent' || !l.lastEmailedAt) return null;
-  if (l.repliedAt || l.bouncedAt) return null;
+  if (l.repliedAt || l.bouncedAt || l.closedAt) return null;
   if (l.reminderCount >= MAX_REMINDERS) return null;
   const segment = segmentOf(l);
   const last = Math.max(+new Date(l.lastEmailedAt), l.lastReminderAt ? +new Date(l.lastReminderAt) : 0);
@@ -108,7 +108,7 @@ function compose(l, segment, n, sig, tpls) {
 
 async function dueLeads(now = new Date()) {
   const rows = await prisma.gmdssLead.findMany({
-    where: { emailStatus: 'sent', repliedAt: null, bouncedAt: null, reminderCount: { lt: MAX_REMINDERS }, email: { not: null } },
+    where: { emailStatus: 'sent', repliedAt: null, bouncedAt: null, closedAt: null, reminderCount: { lt: MAX_REMINDERS }, email: { not: null } },
     orderBy: { lastEmailedAt: 'asc' },
   });
   return rows.map((l) => ({ l, d: dueInfo(l, now) })).filter((x) => x.d);
@@ -121,6 +121,7 @@ async function previewReminder(id) {
   if (!l) throw Object.assign(new Error('not_found'), { status: 404 });
   const d = dueInfo(l, new Date(8.64e15));
   if (!d) {
+    if (l.closedAt) throw Object.assign(new Error('lead_closed'), { status: 409 });
     if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
     if (l.repliedAt) throw Object.assign(new Error('lead_already_replied'), { status: 409 });
     if (l.reminderCount >= MAX_REMINDERS) throw Object.assign(new Error('max_reminders_reached'), { status: 409 });
@@ -136,13 +137,14 @@ async function sendReminder(id, { force = false, now = new Date(), edit = null, 
   const d = dueInfo(l, force ? new Date(8.64e15) : now);
   if (!d) {
     if (!force) return { skipped: 'not_due' };
+    if (l.closedAt) throw Object.assign(new Error('lead_closed'), { status: 409 });
     if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
     if (l.repliedAt) throw Object.assign(new Error('lead_already_replied'), { status: 409 });
     if (l.reminderCount >= MAX_REMINDERS) throw Object.assign(new Error('max_reminders_reached'), { status: 409 });
     throw Object.assign(new Error('lead_not_mailed_yet'), { status: 409 });
   }
   // Claim: only one caller can move reminderCount from n-1 to n.
-  const claim = await prisma.gmdssLead.updateMany({ where: { id, reminderCount: l.reminderCount, repliedAt: null }, data: { reminderCount: { increment: 1 }, lastReminderAt: now } });
+  const claim = await prisma.gmdssLead.updateMany({ where: { id, reminderCount: l.reminderCount, repliedAt: null, closedAt: null }, data: { reminderCount: { increment: 1 }, lastReminderAt: now } });
   if (!claim.count) return { skipped: 'claimed' };
   const sig = (await settings.getAll()).signatureHtml || '';
   let tpls = await getTemplates();

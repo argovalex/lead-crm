@@ -184,6 +184,7 @@ model GmdssLead {
   lastReminderAt DateTime? @map("last_reminder_at")
   codeSentAt    DateTime? @map("code_sent_at")
   accessCode    String?   @map("access_code")
+  closedAt      DateTime? @map("closed_at")
   activities    GmdssActivity[]
 
   @@map("gmdss_leads")
