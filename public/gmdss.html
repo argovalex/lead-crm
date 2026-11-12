@@ -32,6 +32,7 @@ table.g tr.p-A{background:#fdf3f3}table.g tr.p-B{background:#fdf8ec}
 .org .ed{padding:0 6px;line-height:20px;flex:none}
 .why{color:#6b756e;font-size:12px;margin-top:2px;max-width:260px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ct{display:flex;flex-direction:column;gap:1px;direction:ltr;text-align:left;font-size:12px}
+.stlink{text-decoration:none;color:inherit;cursor:pointer;display:inline-flex;flex-wrap:wrap;gap:3px}.stlink:hover .st{filter:brightness(.93)}
 .st{font-size:12px;border-radius:6px;padding:1px 7px;background:#e8eae5;white-space:nowrap}
 .st.sent{background:#d6efe1;color:#1f6f54}.st.failed,.st.bounced{background:#f5d9d9;color:var(--danger)}.st.queued{background:#f6e8cf;color:var(--warn)}
 .egs{display:inline-flex;gap:3px;white-space:nowrap}
@@ -68,7 +69,7 @@ table.g tr.p-A{background:#fdf3f3}table.g tr.p-B{background:#fdf8ec}
     <select id="f-eng" aria-label="סטטוס מייל">
       <option value="">כל סטטוסי המייל</option><option value="sent">נשלח</option><option value="opened">נפתח</option>
       <option value="clicked">הקליק על קישור</option><option value="unopened">נשלח ולא נפתח</option><option value="failed">נכשל / חזר</option>
-      <option value="replied">השיב</option><option value="followup">מעקב להיום</option>
+      <option value="replied">השיב</option><option value="answered">נענו (שלחנו תשובה)</option><option value="reminded">קיבלו תזכורת</option><option value="manualRem">תזכורת ידנית</option><option value="followup">מעקב להיום</option>
     </select>
     <button class="btn" id="f-toggle" type="button" aria-expanded="false" aria-controls="f-more">סינון <span id="f-count" class="badge hidden"></span></button>
     <button class="btn ghost hidden" id="reset" type="button">נקה סינון</button>

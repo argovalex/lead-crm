@@ -96,14 +96,20 @@ function cell(l, k) {
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
-  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="השיב">↩</span>' : ''}${l.reminderCount ? ` <span class="st" title="תזכורות שנשלחו: ${l.reminderCount}${l.lastReminderAt ? ` (אחרונה ${esc(fmt(l.lastReminderAt))})` : ''}">🔔 ${l.reminderCount}${l.manualReminderAt ? ' ידנית' : ''}</span>` : ''}${l.answeredAt ? ` <span class="st sent" title="שלחנו לו תשובה ${esc(fmt(l.answeredAt))}">נענה ✓</span>` : ''}</div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
+  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a></div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
   if (k === 'followUpAt') { const due = isDue(l); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'הגיע מועד המעקב' : 'מעקב מתוכנן'}">${esc(dayHe(v))}</span>`; }
   if (k === 'productFit') return esc(FIT[v] || v);
   if (k === 'priority') return `<span class="pb ${esc(v)}">${esc(v)}</span>`;
   if (k === 'website') return `<a href="${esc(v)}" target="_blank" rel="noopener noreferrer">${esc(v.replace(/^https?:\/\/(www\.)?/, ''))}</a>`;
   if (k === 'email') return `<a href="mailto:${esc(v)}">${esc(v)}</a>`;
   if (k === 'phone') return `<a href="tel:${esc(v.replace(/[^\d+]/g, ''))}">${esc(v)}</a>`;
-  if (k === 'emailStatus') return `<span class="st ${esc(v)}" ${l.lastError ? `title="${esc(l.lastError)}"` : ''}>${esc(STATUS[v] || v)}</span>`;
+  if (k === 'emailStatus') {
+    const tag = (cls, txt, title) => ` <span class="st ${cls}" title="${esc(title)}">${txt}</span>`;
+    return `<a href="#" class="stlink" data-card="${l.id}" title="פתיחת כרטיס הליד"><span class="st ${esc(v)}" ${l.lastError ? `title="${esc(l.lastError)}"` : ''}>${esc(STATUS[v] || v)}</span>`
+      + `${l.reminderCount ? tag('', `🔔 תזכורת ${l.reminderCount}${l.manualReminderAt ? ' ידנית' : ''}`, `תזכורות שנשלחו: ${l.reminderCount}${l.lastReminderAt ? ` (אחרונה ${fmt(l.lastReminderAt)})` : ''}`) : ''}`
+      + `${l.answeredAt ? tag('sent', 'נענה ✓', `שלחנו לו תשובה ${fmt(l.answeredAt)}`) : ''}`
+      + `${l.repliedAt ? tag('sent', '↩ השיב', `השיב ${fmt(l.repliedAt)}`) : ''}</a>`;
+  }
   if (k === 'lastEmailedAt') return esc(fmt(v));
   return esc(v);
 }
