@@ -51,6 +51,14 @@ router.get('/leads', wrap(async (_req, res) => {
 
 // Edit a lead. Changing the email address resets the send state so the corrected address can be mailed again.
 const EDITABLE = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority'];
+router.delete('/leads/:id', wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const cur = await prisma.gmdssLead.findUnique({ where: { id } });
+  if (!cur) throw bad('not_found', 404);
+  await prisma.gmdssLead.delete({ where: { id } }); // activities cascade
+  res.json({ ok: true });
+}));
+
 router.put('/leads/:id', wrap(async (req, res) => {
   const id = Number(req.params.id);
   const cur = await prisma.gmdssLead.findUnique({ where: { id } });

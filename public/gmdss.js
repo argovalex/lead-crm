@@ -383,7 +383,7 @@ async function openCard(id) {
   const row = ([h, v]) => (v ? `<div style="display:flex;gap:8px"><span class="muted" style="min-width:110px">${h}</span><span dir="ltr">${esc(v)}</span></div>` : '');
   dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
       <h3 style="margin:0">${esc(l.organization)} ${l.priority ? `<span class="pb ${esc(l.priority)}">${esc(l.priority)}</span>` : ''}</h3>
-      <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
+      <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-del" style="color:#b91c1c">🗑 מחיקה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
     <div style="margin:8px 0;display:grid;gap:3px;font-size:13px">
       ${[['מדינה', l.country], ['סוג', l.segment], ['התאמת מוצר', FIT[l.productFit] || l.productFit], ['אתר', l.website], ['מייל', l.email], ['טלפון', l.phone],
         ['למה יקנו', l.whyTheydBuy], ['תבנית', l.template && l.template.name], ['סטטוס מייל', STATUS[l.emailStatus] || l.emailStatus],
@@ -418,6 +418,10 @@ async function openCard(id) {
     </div>`);
   $('#cd-close').onclick = dlgClose;
   $('#cd-edit').onclick = () => editLead(id);
+  $('#cd-del').onclick = async () => {
+    if (!confirm(`למחוק לצמיתות את "${l.organization}" וכל ההיסטוריה שלו? אי אפשר לשחזר.`)) return;
+    try { await api(`/leads/${id}`, { method: 'DELETE' }); selected.delete(id); dlgClose(); await load(); toast('הליד נמחק'); } catch (e) { toast(e.message, true); }
+  };
   const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('נשמר'); openCard(id); } catch (e) { toast(e.message, true); } };
   $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);
   $('#cd-fu-clear').onclick = () => saveFu(null);
