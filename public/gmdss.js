@@ -418,10 +418,7 @@ async function openCard(id) {
     </div>`);
   $('#cd-close').onclick = dlgClose;
   $('#cd-edit').onclick = () => editLead(id);
-  $('#cd-del').onclick = async () => {
-    if (!confirm(`למחוק לצמיתות את "${l.organization}" וכל ההיסטוריה שלו? אי אפשר לשחזר.`)) return;
-    try { await api(`/leads/${id}`, { method: 'DELETE' }); selected.delete(id); dlgClose(); await load(); toast('הליד נמחק'); } catch (e) { toast(e.message, true); }
-  };
+  $('#cd-del').onclick = () => deleteLead(id);
   const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('נשמר'); openCard(id); } catch (e) { toast(e.message, true); } };
   $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);
   $('#cd-fu-clear').onclick = () => saveFu(null);
@@ -535,6 +532,12 @@ async function openReminderTemplates() {
 // ---------- Edit a lead ----------
 const EDIT_FIELDS = [['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמת מוצר (Course / Simulator / Both)'],
   ['whyTheydBuy', 'למה יקנו'], ['website', 'אתר'], ['email', 'מייל'], ['phone', 'טלפון'], ['priority', 'עדיפות (A / B / C)']];
+async function deleteLead(id) {
+  const l = leads.find((x) => x.id === id);
+  if (!l || !confirm(`למחוק לצמיתות את "${l.organization}" וכל ההיסטוריה שלו? אי אפשר לשחזר.`)) return;
+  try { await api(`/leads/${id}`, { method: 'DELETE' }); selected.delete(id); dlgClose(); await load(); toast('הליד נמחק'); } catch (e) { toast(e.message, true); }
+}
+
 function editLead(id) {
   const l = leads.find((x) => x.id === id);
   if (!l) return;
@@ -543,8 +546,9 @@ function editLead(id) {
       ? `<textarea data-f="${k}" rows="3" dir="ltr" style="width:100%">${esc(l[k])}</textarea>`
       : `<input data-f="${k}" value="${esc(l[k])}" dir="ltr" style="width:100%">`}</label>`).join('')}
     <p class="muted" style="font-size:12px;margin:8px 0 0">שינוי כתובת המייל מאפס את סטטוס השליחה של הליד, כך שאפשר לשלוח אליו שוב.</p>
-    <div class="toolbar" style="margin-top:12px"><button class="btn primary" id="le-save">שמירה</button><button class="btn" id="le-cancel">ביטול</button></div>`);
+    <div class="toolbar" style="margin-top:12px"><button class="btn primary" id="le-save">שמירה</button><button class="btn" id="le-cancel">ביטול</button><button class="btn" id="le-del" style="color:#b91c1c;margin-inline-start:auto">🗑 מחיקת ליד</button></div>`);
   $('#le-cancel').onclick = dlgClose;
+  $('#le-del').onclick = () => deleteLead(id);
   $('#le-save').onclick = async () => {
     const body = {};
     document.querySelectorAll('#dlg-box [data-f]').forEach((el) => { body[el.dataset.f] = el.value; });
