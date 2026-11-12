@@ -39,7 +39,11 @@ router.get('/variables', (_req, res) => res.json({ variables: VARIABLES, emailCo
 
 router.get('/leads', wrap(async (_req, res) => {
   try { await syncReplies(prisma); } catch (e) { console.error('gmdss reply sync failed', e.message); }
-  res.json(await prisma.gmdssLead.findMany({ orderBy: { id: 'asc' }, include: { template: { select: { id: true, name: true } } } }));
+  const rows = await prisma.gmdssLead.findMany({ orderBy: { id: 'asc' }, include: { template: { select: { id: true, name: true } } } });
+  // When we last answered each lead from the card (one-to-one reply), so the table can mark them.
+  const out = await prisma.gmdssActivity.groupBy({ by: ['leadId'], where: { type: 'reply_sent' }, _max: { createdAt: true } });
+  const answered = new Map(out.map((o) => [o.leadId, o._max.createdAt]));
+  res.json(rows.map((l) => ({ ...l, answeredAt: answered.get(l.id) || null })));
 }));
 
 // Edit a lead. Changing the email address resets the send state so the corrected address can be mailed again.
