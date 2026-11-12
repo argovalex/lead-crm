@@ -130,7 +130,7 @@ async function previewReminder(id) {
   return { to: l.email, n: d.n, segment: d.segment, subject: merge(t.subject, l).text, body: merge(t.body, l).text };
 }
 
-async function sendReminder(id, { force = false, now = new Date(), edit = null } = {}) {
+async function sendReminder(id, { force = false, now = new Date(), edit = null, manual = false } = {}) {
   const l = await prisma.gmdssLead.findUnique({ where: { id } });
   if (!l) throw Object.assign(new Error('not_found'), { status: 404 });
   const d = dueInfo(l, force ? new Date(8.64e15) : now);
@@ -154,7 +154,7 @@ async function sendReminder(id, { force = false, now = new Date(), edit = null }
     const { providerId } = await getProvider().send({ to: l.email, subject: m.subject, html: m.html, text: m.text, idempotencyKey: `gmdss-rem:${id}:${d.n}` });
     // New provider id so opens/clicks of the reminder land on this lead; counters stay cumulative.
     await prisma.gmdssLead.update({ where: { id }, data: { providerId, followUpAt: new Date(+now + 3 * DAY) } });
-    await logActivity(prisma, id, 'reminder', `#${d.n} (${d.segment}) ${m.subject}`);
+    await logActivity(prisma, id, 'reminder', `${manual ? '[ידני] ' : ''}#${d.n} (${d.segment}) ${m.subject}`);
     return { sent: true, segment: d.segment, n: d.n };
   } catch (e) {
     // Give the reminder back; lastReminderAt stays, so the retry waits a full period instead of looping every minute.

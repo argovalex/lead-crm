@@ -43,7 +43,10 @@ router.get('/leads', wrap(async (_req, res) => {
   // When we last answered each lead from the card (one-to-one reply), so the table can mark them.
   const out = await prisma.gmdssActivity.groupBy({ by: ['leadId'], where: { type: 'reply_sent' }, _max: { createdAt: true } });
   const answered = new Map(out.map((o) => [o.leadId, o._max.createdAt]));
-  res.json(rows.map((l) => ({ ...l, answeredAt: answered.get(l.id) || null })));
+  // Reminders sent by hand from the card are logged with a "[ידני]" prefix; automatic ones are not.
+  const man = await prisma.gmdssActivity.groupBy({ by: ['leadId'], where: { type: 'reminder', detail: { startsWith: '[ידני]' } }, _max: { createdAt: true } });
+  const manual = new Map(man.map((o) => [o.leadId, o._max.createdAt]));
+  res.json(rows.map((l) => ({ ...l, answeredAt: answered.get(l.id) || null, manualReminderAt: manual.get(l.id) || null })));
 }));
 
 // Edit a lead. Changing the email address resets the send state so the corrected address can be mailed again.
@@ -149,7 +152,7 @@ router.post('/reminders/run', wrap(async (_req, res) => {
 router.get('/leads/:id/remind/preview', wrap(async (req, res) => { res.json(await reminders.previewReminder(Number(req.params.id))); }));
 router.post('/leads/:id/remind', wrap(async (req, res) => {
   if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
-  const r = await reminders.sendReminder(Number(req.params.id), { force: true, edit: req.body && req.body.subject ? { subject: req.body.subject, body: req.body.body } : null });
+  const r = await reminders.sendReminder(Number(req.params.id), { force: true, manual: true, edit: req.body && req.body.subject ? { subject: req.body.subject, body: req.body.body } : null });
   if (r.failed) throw bad(r.error, 502);
   res.json(r);
 }));

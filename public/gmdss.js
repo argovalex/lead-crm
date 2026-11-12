@@ -27,9 +27,10 @@ const ENG = {
   replied: (l) => !!l.repliedAt,
   answered: (l) => !!l.answeredAt,
   reminded: (l) => (l.reminderCount || 0) > 0,
+  manualRem: (l) => !!l.manualReminderAt,
   followup: isDue,
 };
-const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['followup', 'מעקב להיום']];
+const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום']];
 const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template'];
 const LTR = new Set();
 const TEXT = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
@@ -95,7 +96,7 @@ function cell(l, k) {
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
-  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="השיב">↩</span>' : ''}${l.reminderCount ? ` <span class="st" title="תזכורות שנשלחו: ${l.reminderCount}${l.lastReminderAt ? ` (אחרונה ${esc(fmt(l.lastReminderAt))})` : ''}">🔔 ${l.reminderCount}</span>` : ''}${l.answeredAt ? ` <span class="st sent" title="שלחנו לו תשובה ${esc(fmt(l.answeredAt))}">נענה ✓</span>` : ''}</div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
+  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a>${l.repliedAt ? ' <span class="st sent" title="השיב">↩</span>' : ''}${l.reminderCount ? ` <span class="st" title="תזכורות שנשלחו: ${l.reminderCount}${l.lastReminderAt ? ` (אחרונה ${esc(fmt(l.lastReminderAt))})` : ''}">🔔 ${l.reminderCount}${l.manualReminderAt ? ' ידנית' : ''}</span>` : ''}${l.answeredAt ? ` <span class="st sent" title="שלחנו לו תשובה ${esc(fmt(l.answeredAt))}">נענה ✓</span>` : ''}</div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
   if (k === 'followUpAt') { const due = isDue(l); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'הגיע מועד המעקב' : 'מעקב מתוכנן'}">${esc(dayHe(v))}</span>`; }
   if (k === 'productFit') return esc(FIT[v] || v);
   if (k === 'priority') return `<span class="pb ${esc(v)}">${esc(v)}</span>`;
