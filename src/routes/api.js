@@ -570,4 +570,21 @@ router.get('/messages', wrap(async (req, res) => {
   }));
 }));
 
+// ---------- Mail templates (manual composer) ----------
+const tplData = (b) => {
+  const name = String((b && b.name) || '').trim(), subject = String((b && b.subject) || '').trim(), body = String((b && b.body) || '').trim();
+  if (!name || !subject || !body) throw Object.assign(new Error('template_fields_required'), { status: 400 });
+  return { name, subject, body };
+};
+router.get('/mail-templates', wrap(async (_req, res) => { res.json(await prisma.emailTemplate.findMany({ orderBy: { name: 'asc' } })); }));
+router.post('/mail-templates', wrap(async (req, res) => { res.status(201).json(await prisma.emailTemplate.create({ data: tplData(req.body) })); }));
+router.put('/mail-templates/:id', wrap(async (req, res) => {
+  try { res.json(await prisma.emailTemplate.update({ where: { id: id(req.params.id) }, data: tplData(req.body) })); }
+  catch (e) { if (e.code === 'P2025') return res.status(404).json({ error: 'not_found' }); throw e; }
+}));
+router.delete('/mail-templates/:id', wrap(async (req, res) => {
+  await prisma.emailTemplate.deleteMany({ where: { id: id(req.params.id) } });
+  res.json({ ok: true });
+}));
+
 module.exports = router;
