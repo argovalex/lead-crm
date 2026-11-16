@@ -382,7 +382,7 @@ function composeModal(lead, prefill = {}) {
     <div id="to-new" class="hidden"><label>שם (ליד חדש)<input name="name"></label><label>חברה (ליד חדש)<input name="company"></label></div>`}
     ${TPL_BAR}
     <label>נושא<input name="subject" required></label>
-    <label>תוכן — משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="9" required></textarea></label>
+    <label>תוכן — משתנים: {{name}}, {{first_name}}, {{company}}, {{school_name}}<textarea name="body" rows="9" required></textarea></label>
     ${INSERT_BAR('')}
     <p class="muted">קישור: הדבק כתובת, או השתמש בכפתורים. סרטון YouTube יוצג כתמונה שנפתחת בלחיצה. החתימה נוספת אוטומטית.</p>
     <div class="logrow"><button type="button" class="btn" data-preview="">👁 תצוגה מקדימה</button><button type="button" class="btn" data-test="">✉ שלח לי בדיקה</button></div>`, async (fd) => {
@@ -644,7 +644,7 @@ function bulkMailModal(ids) {
     <p class="muted">זה מייל בודד ולא קמפיין: כל ליד מקבל מייל משלו, הוא נרשם בציר הזמן שלו, ואחרי השליחה נוצר לו מעקב ל-5 ימים. תשובות יופיעו בטאב "דואר". לידים שהסירו את עצמם או שהכתובת שלהם חוזרת ידולגו.</p>
     ${TPL_BAR}
     <label>נושא<input name="subject" required></label>
-    <label>תוכן, משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="9" required></textarea></label>
+    <label>תוכן, משתנים: {{name}}, {{first_name}}, {{company}}, {{school_name}}<textarea name="body" rows="9" required></textarea></label>
     ${INSERT_BAR('')}
     <div class="logrow"><button type="button" class="btn" data-preview="">👁 תצוגה מקדימה</button><button type="button" class="btn" data-test="">✉ שלח לי בדיקה</button></div>`, async (fd) => {
     const r = await api('/leads/bulk-email', { method: 'POST', body: { ids, subject: fd.subject, body: fd.body } });

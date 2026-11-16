@@ -11,7 +11,7 @@ const MAX_ATTEMPTS = 5;
 
 function renderVars(tpl, lead) {
   const firstName = (lead.name || '').split(/\s+/)[0] || '';
-  const vars = { name: lead.name || '', first_name: firstName, company: lead.company || '', email: lead.email };
+  const vars = { name: lead.name || '', first_name: firstName, company: lead.company || '', school_name: lead.company || lead.name || '', email: lead.email };
   return String(tpl).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (k in vars ? vars[k] : ''));
 }
 
