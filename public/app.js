@@ -51,7 +51,7 @@ function toast(msg, err = false) {
   t._t = setTimeout(() => { t.className = 'toast'; }, 2600);
 }
 const ERR = {
-  message_not_editable: 'ההודעה כבר נשלחה או בוטלה', subject_and_body_required: 'נושא ותוכן חובה',
+  message_not_editable: 'ההודעה כבר נשלחה או בוטלה', template_fields_required: 'לתבנית חובה שם, נושא ותוכן', subject_and_body_required: 'נושא ותוכן חובה',
   duplicate_email: 'אימייל כבר קיים במערכת', invalid_email: 'אימייל לא תקין', lead_unsubscribed: 'הליד הסיר עצמו מהתפוצה',
   lead_bounced: 'כתובת המייל חוזרת (bounce)', lead_not_emailable: 'לא ניתן לשלוח לליד הזה', already_enrolled: 'הליד כבר ברצף הזה',
   sequence_has_active_enrollments: 'יש לידים פעילים ברצף — לא ניתן לערוך צעדים', delays_must_be_ascending: 'ימי ההמתנה חייבים להיות בסדר עולה',
@@ -330,6 +330,48 @@ async function openLead(id, replace) {
 
 const INSERT_BAR = (i = '') => `<div class="insrow"><button type="button" class="btn ghost sm" data-ins="link" data-for="${i}">🔗 הוסף קישור</button><button type="button" class="btn ghost sm" data-ins="video" data-for="${i}">▶ הוסף סרטון YouTube</button></div>`;
 
+// ---------------- Mail templates (compose / bulk) ----------------
+const TPL_BAR = `<div class="tplrow"><select data-tpl-pick><option value="">תבנית: בחר…</option></select><button type="button" class="btn ghost sm" data-tpl-save>💾 שמור כתבנית</button><button type="button" class="btn ghost sm hidden" data-tpl-del>🗑 מחק תבנית</button></div>`;
+function bindTemplates(form) {
+  const pick = form.querySelector('[data-tpl-pick]');
+  const del = form.querySelector('[data-tpl-del]');
+  const subj = form.querySelector('[name="subject"]');
+  const body = form.querySelector('[name="body"]');
+  let list = [];
+  const draw = (selId) => {
+    pick.innerHTML = '<option value="">תבנית: בחר…</option>' + list.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    pick.value = selId ? String(selId) : '';
+    del.classList.toggle('hidden', !pick.value);
+  };
+  const reload = async (selId) => { try { list = await api('/mail-templates'); } catch { list = []; } draw(selId); };
+  pick.onchange = () => {
+    const t = list.find((x) => String(x.id) === pick.value);
+    del.classList.toggle('hidden', !t);
+    if (!t) return;
+    if (body.value.trim() && body.value.trim() !== t.body && !confirm('להחליף את הנושא והתוכן שכתבת בתבנית?')) { pick.value = ''; del.classList.add('hidden'); return; }
+    subj.value = t.subject; body.value = t.body;
+  };
+  form.querySelector('[data-tpl-save]').onclick = async () => {
+    if (!subj.value.trim() || !body.value.trim()) return toast('כתוב נושא ותוכן לפני השמירה כתבנית', true);
+    const cur = list.find((x) => String(x.id) === pick.value);
+    const name = prompt(cur ? 'שם התבנית (השאר את השם כדי לעדכן אותה, או הקלד שם חדש לשמירה כתבנית נוספת):' : 'שם התבנית:', cur ? cur.name : (subj.value.trim().slice(0, 50)));
+    if (!name || !name.trim()) return;
+    try {
+      const payload = { name: name.trim(), subject: subj.value, body: body.value };
+      const same = cur && cur.name === payload.name;
+      const saved = same ? await api(`/mail-templates/${cur.id}`, { method: 'PUT', body: payload }) : await api('/mail-templates', { method: 'POST', body: payload });
+      await reload(saved.id);
+      toast(same ? 'התבנית עודכנה' : 'התבנית נשמרה');
+    } catch (err) { fail(err); }
+  };
+  del.onclick = async () => {
+    const t = list.find((x) => String(x.id) === pick.value);
+    if (!t || !confirm(`למחוק את התבנית "${t.name}"?`)) return;
+    try { await api(`/mail-templates/${t.id}`, { method: 'DELETE' }); await reload(); toast('התבנית נמחקה'); } catch (err) { fail(err); }
+  };
+  reload();
+}
+
 // Compose an email. With a lead: send to it. Without: ask for the address (creates the lead if new).
 function composeModal(lead, prefill = {}) {
   const form = modal(`<h3>${lead ? `מייל ל-${esc(lead.name)}` : 'מייל חדש'}</h3>
@@ -338,6 +380,7 @@ function composeModal(lead, prefill = {}) {
     <datalist id="to-opts"></datalist>
     <p class="muted" id="to-hint">הנמען יהפוך לליד אחרי השליחה (אם עוד לא קיים), והתשובה שלו תופיע בטאב "דואר".</p>
     <div id="to-new" class="hidden"><label>שם (ליד חדש)<input name="name"></label><label>חברה (ליד חדש)<input name="company"></label></div>`}
+    ${TPL_BAR}
     <label>נושא<input name="subject" required></label>
     <label>תוכן — משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="9" required></textarea></label>
     ${INSERT_BAR('')}
@@ -350,6 +393,7 @@ function composeModal(lead, prefill = {}) {
     if (lead) openLead(lead.id);
   }, 'שליחה');
   if (prefill.subject) form.querySelector('[name="subject"]').value = prefill.subject;
+  bindTemplates(form);
   if (!lead) {
     const dl = form.querySelector('#to-opts');
     const inp = form.querySelector('[name="email"]');
@@ -598,6 +642,7 @@ function bulkMailModal(ids) {
   const form = modal(`<h3>מייל ל-${ids.length} לידים</h3>
     <div class="rcpts">${names.slice(0, 12).map((n) => `<span class="flag">${esc(n)}</span>`).join('')}${names.length > 12 ? `<span class="flag">+${names.length - 12}</span>` : ''}</div>
     <p class="muted">זה מייל בודד ולא קמפיין: כל ליד מקבל מייל משלו, הוא נרשם בציר הזמן שלו, ואחרי השליחה נוצר לו מעקב ל-5 ימים. תשובות יופיעו בטאב "דואר". לידים שהסירו את עצמם או שהכתובת שלהם חוזרת ידולגו.</p>
+    ${TPL_BAR}
     <label>נושא<input name="subject" required></label>
     <label>תוכן, משתנים: {{name}}, {{first_name}}, {{company}}<textarea name="body" rows="9" required></textarea></label>
     ${INSERT_BAR('')}
@@ -606,6 +651,7 @@ function bulkMailModal(ids) {
     toast(`${r.queued} מיילים בתור${r.skipped.length ? ` · ${r.skipped.length} דולגו` : ''}`);
     refreshView();
   }, `שליחה ל-${ids.length}`);
+  bindTemplates(form);
   const first = form.querySelector('[name="subject"]');
   form.insertAdjacentHTML('beforeend', `<input type="hidden" name="leadId" value="${ids[0]}">`);
   first.focus();

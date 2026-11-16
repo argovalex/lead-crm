@@ -213,3 +213,15 @@ model GmdssActivity {
   @@index([leadId, createdAt])
   @@map("gmdss_activities")
 }
+
+// Reusable subject+body pairs for the manual mail composer (Mail tab / lead drawer / bulk mail).
+model EmailTemplate {
+  id        Int      @id @default(autoincrement())
+  name      String
+  subject   String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("email_templates")
+}

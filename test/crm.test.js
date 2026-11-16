@@ -309,3 +309,20 @@ test('approval mode: sequence step is a DRAFT until approved; rendered email has
   const built = email.buildEmail(lead, 'x', '[video:https://youtu.be/S8zjWCywGj4]', { signatureHtml: '' });
   assert.match(built.html, /img\.youtube\.com\/vi\/S8zjWCywGj4\/hqdefault\.jpg/);
 });
+
+test('mail templates: create, list, update, delete', async () => {
+  const api = require('../src/routes/api');
+  const express = require('express');
+  const app = express(); app.use(express.json()); app.use('/api', api);
+  const bad = await request(app).post('/api/mail-templates').send({ name: 'x', subject: '', body: 'b' });
+  assert.equal(bad.status, 400);
+  const c = await request(app).post('/api/mail-templates').send({ name: ' Intro ', subject: 'Hi {{name}}', body: 'Hello' });
+  assert.equal(c.status, 201);
+  assert.equal(c.body.name, 'Intro');
+  const u = await request(app).put(`/api/mail-templates/${c.body.id}`).send({ name: 'Intro', subject: 'S2', body: 'B2' });
+  assert.equal(u.body.subject, 'S2');
+  assert.equal((await request(app).get('/api/mail-templates')).body.length, 1);
+  assert.equal((await request(app).put('/api/mail-templates/9999').send({ name: 'a', subject: 'b', body: 'c' })).status, 404);
+  assert.equal((await request(app).delete(`/api/mail-templates/${c.body.id}`)).status, 200);
+  assert.equal((await request(app).get('/api/mail-templates')).body.length, 0);
+});
