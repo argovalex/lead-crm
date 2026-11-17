@@ -20,6 +20,7 @@ const isDue = (l) => !!(!l.closedAt && l.followUpAt &&new Date(l.followUpAt) <= 
 // Email-status filter. The summary chips above the table use the same predicates.
 const ENG = {
   sent: (l) => l.emailStatus === 'sent',
+  notsent: (l) => l.emailStatus === 'not_sent' && !l.closedAt,
   opened: (l) => !!l.openedAt,
   clicked: (l) => !!l.clickedAt,
   unopened: (l) => l.emailStatus === 'sent' && !l.openedAt,
@@ -32,7 +33,7 @@ const ENG = {
   closed: (l) => !!l.closedAt,
   open: (l) => !l.closedAt,
 };
-const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['closed', 'סגורים']];
+const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['notsent', 'לא נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['closed', 'סגורים']];
 const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template'];
 const LTR = new Set();
 const TEXT = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
