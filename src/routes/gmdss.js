@@ -118,12 +118,12 @@ router.put('/leads/:id', wrap(async (req, res) => {
 
 // Conversation history for a lead as {dir, subject, body, at} items, oldest first.
 async function threadFor(lead) {
-  const acts = await prisma.gmdssActivity.findMany({ where: { leadId: lead.id, type: { in: ['sent', 'replied', 'reply_sent'] } }, orderBy: { createdAt: 'asc' } });
+  const acts = await prisma.gmdssActivity.findMany({ where: { leadId: lead.id, type: { in: ['sent', 'replied', 'reply_sent', 'first_sent'] } }, orderBy: { createdAt: 'asc' } });
   const tpl = lead.templateId ? await prisma.gmdssTemplate.findUnique({ where: { id: lead.templateId } }) : null;
   return acts.map((a) => {
     const d = a.detail || '';
     if (a.type === 'replied') { const [subject, ...rest] = d.split('\n'); return { dir: 'in', subject, body: rest.join('\n'), at: a.createdAt }; }
-    if (a.type === 'reply_sent') { const [subject, ...rest] = d.split('\n'); return { dir: 'out', subject, body: rest.join('\n'), at: a.createdAt }; }
+    if (a.type === 'reply_sent' || a.type === 'first_sent') { const [subject, ...rest] = d.split('\n'); return { dir: 'out', subject, body: rest.join('\n'), at: a.createdAt }; }
     return { dir: 'out', subject: d.replace(/\s+\[template:.*$/, ''), body: tpl ? merge(tpl.body, lead).text : '', at: a.createdAt };
   });
 }
@@ -151,8 +151,10 @@ router.post('/leads/:id/reply', wrap(async (req, res) => {
   const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(text)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}</div>`;
   const plain = `${renderPlain(text)}${sig ? `\n\n${htmlToText(sig)}` : ''}`;
   await getProvider().send({ to: lead.email, subject, html, text: plain, idempotencyKey: `gmdss-reply:${lead.id}:${Date.now()}` });
-  await logActivity(prisma, lead.id, 'reply_sent', `${subject}\n${text}`);
-  await prisma.gmdssLead.update({ where: { id: lead.id }, data: { followUpAt: new Date(Date.now() + FUP_DAYS * 86400000) } });
+  // A lead never emailed before gets its first email from the card: mark it sent, not "answered".
+  const first = lead.emailStatus !== 'sent';
+  await logActivity(prisma, lead.id, first ? 'first_sent' : 'reply_sent', `${subject}\n${text}`);
+  await prisma.gmdssLead.update({ where: { id: lead.id }, data: { followUpAt: new Date(Date.now() + FUP_DAYS * 86400000), ...(first ? { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null } : {}) } });
   res.json({ sentTo: lead.email });
 }));
 
