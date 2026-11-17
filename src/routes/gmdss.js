@@ -12,6 +12,7 @@ const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const bad = (m, status = 400) => Object.assign(new Error(m), { status });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const { parseEmails, validEmails, normEmails } = require('../services/emails');
 const FUP_DAYS = 7; // default follow-up after a send; editable per lead in the customer card
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -90,8 +91,8 @@ router.put('/leads/:id', wrap(async (req, res) => {
   }
   if ('organization' in data && !data.organization) throw bad('organization_required');
   if (data.email) {
-    data.email = data.email.toLowerCase();
-    if (!EMAIL_RE.test(data.email)) throw bad('invalid_email');
+    data.email = normEmails(data.email);
+    if (!validEmails(data.email)) throw bad('invalid_email');
   }
   if (data.priority && !['A', 'B', 'C'].includes(data.priority)) throw bad('priority_must_be_A_B_or_C');
   if ('followUpAt' in (req.body || {})) {
@@ -142,7 +143,7 @@ router.post('/leads/:id/suggest', wrap(async (req, res) => {
 router.post('/leads/:id/reply', wrap(async (req, res) => {
   const lead = await prisma.gmdssLead.findUnique({ where: { id: Number(req.params.id) } });
   if (!lead) throw bad('not_found', 404);
-  if (!lead.email || !EMAIL_RE.test(lead.email)) throw bad('lead_has_no_email');
+  if (!lead.email || !validEmails(lead.email)) throw bad('lead_has_no_email');
   const subject = String((req.body && req.body.subject) || '').trim();
   const text = String((req.body && req.body.body) || '').trim();
   if (!subject || !text) throw bad('subject_and_body_required');
@@ -150,7 +151,7 @@ router.post('/leads/:id/reply', wrap(async (req, res) => {
   const sig = (await settings.getAll()).signatureHtml || '';
   const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(text)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}</div>`;
   const plain = `${renderPlain(text)}${sig ? `\n\n${htmlToText(sig)}` : ''}`;
-  await getProvider().send({ to: lead.email, subject, html, text: plain, idempotencyKey: `gmdss-reply:${lead.id}:${Date.now()}` });
+  await getProvider().send({ to: parseEmails(lead.email), subject, html, text: plain, idempotencyKey: `gmdss-reply:${lead.id}:${Date.now()}` });
   // A lead never emailed before gets its first email from the card: mark it sent, not "answered".
   const first = lead.emailStatus !== 'sent';
   await logActivity(prisma, lead.id, first ? 'first_sent' : 'reply_sent', `${subject}\n${text}`);
@@ -271,7 +272,7 @@ router.post('/send', wrap(async (req, res) => {
   if (sending) throw bad('send_in_progress', 409);
 
   const rows = await prisma.gmdssLead.findMany({ where: { id: { in: ids.map(Number).filter(Number.isInteger) } }, orderBy: { id: 'asc' } });
-  const eligible = rows.filter((l) => l.email && EMAIL_RE.test(l.email) && (includeSent || l.emailStatus !== 'sent') && !l.closedAt);
+  const eligible = rows.filter((l) => l.email && validEmails(l.email) && (includeSent || l.emailStatus !== 'sent') && !l.closedAt);
   if (!eligible.length) throw bad('nothing_to_send');
   const skipped = rows.length - eligible.length;
 
@@ -285,7 +286,7 @@ router.post('/send', wrap(async (req, res) => {
         if (i) await sleep(gap);
         try {
           const b = await build(l, subject, body);
-          const { providerId } = await getProvider().send({ to: l.email, subject: b.subject, html: b.html, text: b.text, idempotencyKey: `gmdss:${l.id}:${stamp}` });
+          const { providerId } = await getProvider().send({ to: parseEmails(l.email), subject: b.subject, html: b.html, text: b.text, idempotencyKey: `gmdss:${l.id}:${stamp}` });
           await prisma.gmdssLead.update({ where: { id: l.id }, data: { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null, providerId, deliveredAt: null, openedAt: null, clickedAt: null, bouncedAt: null, lastClickLink: null, openCount: 0, clickCount: 0, followUpAt: new Date(Date.now() + FUP_DAYS * 86400000) } });
           await logActivity(prisma, l.id, 'sent', `${b.subject}  [template: ${tpl.name}]`);
         } catch (e) {

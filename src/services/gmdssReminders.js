@@ -7,7 +7,7 @@ const { getProvider } = require('./provider');
 const { renderRich, renderPlain, htmlToText } = require('./render');
 const { merge, logActivity } = require('./gmdss');
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const { parseEmails, validEmails } = require('./emails');
 const MAX_REMINDERS = 3;
 const WAIT_DAYS = { hot: 3, warm: 3, cold: 3 };
 const DAILY_CAP = parseInt(process.env.GMDSS_REMINDER_DAILY_CAP || '40', 10);
@@ -36,7 +36,7 @@ const segmentOf = (l) => (l.clickCount > 0 ? 'hot' : l.openCount > 0 ? 'warm' : 
 
 // Pure: is this lead due for its next reminder at `now`?  Returns { segment, n, dueAt } or null.
 function dueInfo(l, now = new Date()) {
-  if (!l.email || !EMAIL_RE.test(l.email)) return null;
+  if (!l.email || !validEmails(l.email)) return null;
   if (l.emailStatus !== 'sent' || !l.lastEmailedAt) return null;
   if (l.repliedAt || l.bouncedAt || l.closedAt) return null;
   if (l.reminderCount >= MAX_REMINDERS) return null;
@@ -122,13 +122,13 @@ async function previewReminder(id) {
   const d = dueInfo(l, new Date(8.64e15));
   if (!d) {
     if (l.closedAt) throw Object.assign(new Error('lead_closed'), { status: 409 });
-    if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
+    if (!l.email || !validEmails(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
     if (l.repliedAt) throw Object.assign(new Error('lead_already_replied'), { status: 409 });
     if (l.reminderCount >= MAX_REMINDERS) throw Object.assign(new Error('max_reminders_reached'), { status: 409 });
     throw Object.assign(new Error('lead_not_mailed_yet'), { status: 409 });
   }
   const t = (await getTemplates())[d.segment][d.n - 1];
-  return { to: l.email, n: d.n, segment: d.segment, subject: merge(t.subject, l).text, body: merge(t.body, l).text };
+  return { to: parseEmails(l.email).join(', '), n: d.n, segment: d.segment, subject: merge(t.subject, l).text, body: merge(t.body, l).text };
 }
 
 async function sendReminder(id, { force = false, now = new Date(), edit = null, manual = false } = {}) {
@@ -138,7 +138,7 @@ async function sendReminder(id, { force = false, now = new Date(), edit = null, 
   if (!d) {
     if (!force) return { skipped: 'not_due' };
     if (l.closedAt) throw Object.assign(new Error('lead_closed'), { status: 409 });
-    if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
+    if (!l.email || !validEmails(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
     if (l.repliedAt) throw Object.assign(new Error('lead_already_replied'), { status: 409 });
     if (l.reminderCount >= MAX_REMINDERS) throw Object.assign(new Error('max_reminders_reached'), { status: 409 });
     throw Object.assign(new Error('lead_not_mailed_yet'), { status: 409 });
@@ -153,7 +153,7 @@ async function sendReminder(id, { force = false, now = new Date(), edit = null, 
   }
   const m = compose(l, d.segment, d.n, sig, tpls);
   try {
-    const { providerId } = await getProvider().send({ to: l.email, subject: m.subject, html: m.html, text: m.text, idempotencyKey: `gmdss-rem:${id}:${d.n}` });
+    const { providerId } = await getProvider().send({ to: parseEmails(l.email), subject: m.subject, html: m.html, text: m.text, idempotencyKey: `gmdss-rem:${id}:${d.n}` });
     // New provider id so opens/clicks of the reminder land on this lead; counters stay cumulative.
     await prisma.gmdssLead.update({ where: { id }, data: { providerId, followUpAt: new Date(+now + 3 * DAY) } });
     await logActivity(prisma, id, 'reminder', `${manual ? '[ידני] ' : ''}#${d.n} (${d.segment}) ${m.subject}`);
@@ -209,14 +209,14 @@ Best regards`;
 async function previewCode(id, { code } = {}) {
   const l = await prisma.gmdssLead.findUnique({ where: { id } });
   if (!l) throw Object.assign(new Error('not_found'), { status: 404 });
-  if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
+  if (!l.email || !validEmails(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
   const c = String(code || '').trim() || l.accessCode || newCode();
-  return { to: l.email, code: c, ...codeEmail(l, c, '') };
+  return { to: parseEmails(l.email).join(', '), code: c, ...codeEmail(l, c, '') };
 }
 async function sendCode(id, { code, note, edit = null } = {}) {
   const l = await prisma.gmdssLead.findUnique({ where: { id } });
   if (!l) throw Object.assign(new Error('not_found'), { status: 404 });
-  if (!l.email || !EMAIL_RE.test(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
+  if (!l.email || !validEmails(l.email)) throw Object.assign(new Error('lead_has_no_email'), { status: 400 });
   const c = String(code || '').trim() || newCode();
   const sig = (await settings.getAll()).signatureHtml || '';
   let { subject, body } = codeEmail(l, c, String(note || '').trim());
@@ -225,7 +225,7 @@ async function sendCode(id, { code, note, edit = null } = {}) {
   const text = `${renderPlain(body)}${sig ? `
 
 ${htmlToText(sig)}` : ''}`;
-  const { providerId } = await getProvider().send({ to: l.email, subject, html, text, idempotencyKey: `gmdss-code:${id}:${Date.now()}` });
+  const { providerId } = await getProvider().send({ to: parseEmails(l.email), subject, html, text, idempotencyKey: `gmdss-code:${id}:${Date.now()}` });
   const now = new Date();
   await prisma.gmdssLead.update({ where: { id }, data: { accessCode: c, codeSentAt: now, providerId, followUpAt: new Date(+now + 3 * DAY) } });
   await logActivity(prisma, id, 'code_sent', `Access code ${c} sent`);

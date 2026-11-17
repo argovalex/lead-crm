@@ -551,7 +551,7 @@ async function openReminderTemplates() {
 
 // ---------- Edit a lead ----------
 const EDIT_FIELDS = [['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמת מוצר (Course / Simulator / Both)'],
-  ['whyTheydBuy', 'למה יקנו'], ['website', 'אתר'], ['email', 'מייל'], ['phone', 'טלפון'], ['priority', 'עדיפות (A / B / C)']];
+  ['whyTheydBuy', 'למה יקנו'], ['website', 'אתר'], ['email', 'מייל (כמה כתובות: מופרדות ב-;)'], ['phone', 'טלפון'], ['priority', 'עדיפות (A / B / C)']];
 async function deleteLead(id) {
   const l = leads.find((x) => x.id === id);
   if (!l || !confirm(`למחוק לצמיתות את "${l.organization}" וכל ההיסטוריה שלו? אי אפשר לשחזר.`)) return;

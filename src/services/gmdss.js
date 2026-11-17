@@ -1,4 +1,5 @@
 // GMDSS outreach: CSV parsing, contact splitting, import, merge-field rendering.
+const { parseEmails } = require('./emails');
 const { parse } = require('csv-parse/sync');
 
 // Variable names are exactly the CSV headings (case-sensitive).
@@ -94,11 +95,11 @@ const FREE_MAIL = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co
 // Returns { lead, exact } or null.
 async function findReplyLead(prisma, email) {
   const addr = String(email || '').trim().toLowerCase();
-  const exact = await prisma.gmdssLead.findFirst({ where: { email: { equals: addr, mode: 'insensitive' } } });
+  const exact = (await prisma.gmdssLead.findMany({ where: { email: { contains: addr, mode: 'insensitive' } } })).find((l) => parseEmails(l.email).includes(addr));
   if (exact) return { lead: exact, exact: true };
   const domain = addr.split('@')[1];
   if (!domain || FREE_MAIL.has(domain)) return null;
-  const same = await prisma.gmdssLead.findMany({ where: { email: { endsWith: `@${domain}`, mode: 'insensitive' }, lastEmailedAt: { not: null } } });
+  const same = await prisma.gmdssLead.findMany({ where: { email: { contains: `@${domain}`, mode: 'insensitive' }, lastEmailedAt: { not: null } } });
   if (!same.length) return null;
   same.sort((a, b) => new Date(b.lastEmailedAt) - new Date(a.lastEmailedAt));
   return { lead: same[0], exact: false };
@@ -121,7 +122,7 @@ async function logReply(prisma, email, subject, body, now = new Date()) {
 async function syncReplies(prisma) {
   const emails = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, repliedAt: true } }));
   if (!emails.length) return;
-  const byEmail = new Map(emails.map((l) => [l.email.toLowerCase(), l]));
+  const byEmail = new Map(emails.flatMap((l) => parseEmails(l.email).map((e) => [e, l])));
   const ins = await prisma.activity.findMany({
     where: { type: 'REPLY_IN', lead: { email: { in: [...byEmail.keys()] } } },
     include: { lead: { select: { email: true } } }, orderBy: { createdAt: 'asc' },
