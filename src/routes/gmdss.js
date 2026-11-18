@@ -51,7 +51,7 @@ router.get('/leads', wrap(async (_req, res) => {
 }));
 
 // Edit a lead. Changing the email address resets the send state so the corrected address can be mailed again.
-const EDITABLE = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority'];
+const EDITABLE = ['organization', 'contactName', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority'];
 // Close (stop) or reopen leads: closed leads get no reminders and are skipped by mass sends.
 router.post('/leads/close', wrap(async (req, res) => {
   const ids = ((req.body && req.body.ids) || []).map(Number).filter(Number.isInteger);

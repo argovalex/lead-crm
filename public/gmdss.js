@@ -36,7 +36,7 @@ const ENG = {
 const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['notsent', 'לא נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['closed', 'סגורים']];
 const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template'];
 const LTR = new Set();
-const TEXT = ['organization', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
+const TEXT = ['organization', 'contactName', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
 const fmt = (d) => (d ? new Date(d).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : '');
 const engScore = (l) => (l.clickedAt ? 3 : l.openedAt ? 2 : l.deliveredAt ? 1 : 0);
 
@@ -99,7 +99,7 @@ function cell(l, k) {
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
-  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a></div>${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
+  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a></div>${l.contactName ? `<div class="why" dir="ltr" style="text-align:start">👤 ${esc(l.contactName)}</div>` : ''}${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
   if (k === 'followUpAt') { const due = isDue(l); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'הגיע מועד המעקב' : 'מעקב מתוכנן'}">${esc(dayHe(v))}</span>`; }
   if (k === 'productFit') return esc(FIT[v] || v);
   if (k === 'priority') return `<span class="pb ${esc(v)}">${esc(v)}</span>`;
@@ -400,7 +400,7 @@ async function openCard(id) {
       <h3 style="margin:0">${esc(l.organization)} ${l.priority ? `<span class="pb ${esc(l.priority)}">${esc(l.priority)}</span>` : ''}</h3>
       <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-close-lead">${l.closedAt ? '↺ פתיחה מחדש' : '⛔ סגירה ועצירה'}</button> <button class="btn sm" id="cd-del" style="color:#b91c1c">🗑 מחיקה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
     <div style="margin:8px 0;display:grid;gap:3px;font-size:13px">
-      ${[['מדינה', l.country], ['סוג', l.segment], ['התאמת מוצר', FIT[l.productFit] || l.productFit], ['אתר', l.website], ['מייל', l.email], ['טלפון', l.phone],
+      ${[['איש קשר', l.contactName], ['מדינה', l.country], ['סוג', l.segment], ['התאמת מוצר', FIT[l.productFit] || l.productFit], ['אתר', l.website], ['מייל', l.email], ['טלפון', l.phone],
         ['למה יקנו', l.whyTheydBuy], ['תבנית', l.template && l.template.name], ['סטטוס מייל', STATUS[l.emailStatus] || l.emailStatus],
         ['נשלח לאחרונה', fmt(l.lastEmailedAt)], ['פתיחות / הקלקות', `${l.openCount || 0} / ${l.clickCount || 0}`], ['תזכורות', `${l.reminderCount || 0}${l.lastReminderAt ? ` (אחרונה ${fmt(l.lastReminderAt)})` : ''}`], ['קוד גישה', l.accessCode ? `${l.accessCode} (${fmt(l.codeSentAt)})` : ''], ['השיב', fmt(l.repliedAt)]].map(row).join('')}
     </div>
@@ -550,7 +550,7 @@ async function openReminderTemplates() {
 }
 
 // ---------- Edit a lead ----------
-const EDIT_FIELDS = [['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמת מוצר (Course / Simulator / Both)'],
+const EDIT_FIELDS = [['organization', 'ארגון'], ['contactName', 'שם איש קשר (פנייה אישית: Dear <שם>, במקום Dear <ארגון> team,)'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמת מוצר (Course / Simulator / Both)'],
   ['whyTheydBuy', 'למה יקנו'], ['website', 'אתר'], ['email', 'מייל (כמה כתובות: מופרדות ב-;)'], ['phone', 'טלפון'], ['priority', 'עדיפות (A / B / C)']];
 async function deleteLead(id) {
   const l = leads.find((x) => x.id === id);

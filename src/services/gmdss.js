@@ -3,7 +3,7 @@ const { parseEmails } = require('./emails');
 const { parse } = require('csv-parse/sync');
 
 // Variable names are exactly the CSV headings (case-sensitive).
-const VARIABLES = ['Organization', 'Country', 'Segment', 'Product Fit', "Why They'd Buy", 'Website', 'Email', 'Phone', 'Priority'];
+const VARIABLES = ['Organization', 'Contact', 'Country', 'Segment', 'Product Fit', "Why They'd Buy", 'Website', 'Email', 'Phone', 'Priority'];
 
 const clean = (v) => {
   const s = String(v ?? '').trim();
@@ -26,6 +26,7 @@ function parseCsv(text) {
     const { email, phone } = splitContact(r['Contact Email / Phone']);
     return {
       organization: clean(r['Organization']),
+      contactName: clean(r['Contact Name'] ?? r['Contact']),
       country: clean(r['Country']),
       segment: clean(r['Segment']),
       productFit: clean(r['Product Fit']),
@@ -64,16 +65,24 @@ async function importRows(prisma, rows) {
 
 function valuesFor(lead) {
   return {
-    Organization: lead.organization, Country: lead.country, Segment: lead.segment, 'Product Fit': lead.productFit,
+    Organization: lead.organization, Contact: lead.contactName ? String(lead.contactName).trim() : null, Country: lead.country, Segment: lead.segment, 'Product Fit': lead.productFit,
     "Why They'd Buy": lead.whyTheydBuy, Website: lead.website, Email: lead.email, Phone: lead.phone, Priority: lead.priority,
   };
 }
 
 // Replaces {{Heading}} with the lead's value (empty string when missing). Unknown names stay untouched and are reported.
+// When the lead has a personal contact name, a leading salutation line ("Dear X team," / "Hi," / "Hello,")
+// becomes "Dear <name>,". Templates stay generic; leads without a name keep the generic greeting.
+const SALUTATION = /^(\s*(?:\*\*)?)(?:Dear [^\n]*|Hi|Hello),[ \t]*(?=\n|$)/;
+function personalize(text, lead) {
+  const name = String(lead.contactName ?? '').trim();
+  return name ? text.replace(SALUTATION, (_m, pre) => `${pre}Dear ${name},`) : text;
+}
+
 function merge(tpl, lead) {
   const vals = valuesFor(lead);
   const unknown = new Set();
-  const out = String(tpl ?? '').replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (m, k) => {
+  const out = personalize(String(tpl ?? ''), lead).replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (m, k) => {
     if (k in vals) return vals[k] ?? '';
     unknown.add(k);
     return m;
