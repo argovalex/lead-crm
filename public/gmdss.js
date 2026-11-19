@@ -110,7 +110,7 @@ function cell(l, k) {
     const tag = (cls, txt, title) => ` <span class="st ${cls}" title="${esc(title)}">${txt}</span>`;
     return `<a href="#" class="stlink" data-card="${l.id}" title="פתיחת כרטיס הליד"><span class="st ${esc(v)}" ${l.lastError ? `title="${esc(l.lastError)}"` : ''}>${esc(STATUS[v] || v)}</span>`
       + `${l.reminderCount ? tag('', `🔔 תזכורת ${l.reminderCount}${l.manualReminderAt ? ' ידנית' : ''}`, `תזכורות שנשלחו: ${l.reminderCount}${l.lastReminderAt ? ` (אחרונה ${fmt(l.lastReminderAt)})` : ''}`) : ''}`
-      + `${l.closedAt ? tag('failed', '⛔ סגור', `נסגר ${fmt(l.closedAt)}. אין תזכורות ושליחות.`) : ''}`
+      + `${l.closedAt ? tag('failed', '⛔ סגור', `נסגר ${fmt(l.closedAt)}${l.closedReason ? `: ${l.closedReason}` : ''}. אין תזכורות ושליחות.`) : ''}`
       + `${l.answeredAt ? tag('sent', 'נענה ✓', `שלחנו לו תשובה ${fmt(l.answeredAt)}`) : ''}`
       + `${l.repliedAt ? tag('sent', '↩ השיב', `השיב ${fmt(l.repliedAt)}`) : ''}</a>`;
   }
@@ -401,7 +401,7 @@ async function openCard(id) {
       <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-close-lead">${l.closedAt ? '↺ פתיחה מחדש' : '⛔ סגירה ועצירה'}</button> <button class="btn sm" id="cd-del" style="color:#b91c1c">🗑 מחיקה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
     <div style="margin:8px 0;display:grid;gap:3px;font-size:13px">
       ${[['איש קשר', l.contactName], ['מדינה', l.country], ['סוג', l.segment], ['התאמת מוצר', FIT[l.productFit] || l.productFit], ['אתר', l.website], ['מייל', l.email], ['טלפון', l.phone],
-        ['למה יקנו', l.whyTheydBuy], ['תבנית', l.template && l.template.name], ['סטטוס מייל', STATUS[l.emailStatus] || l.emailStatus],
+        ['למה יקנו', l.whyTheydBuy], ['תבנית', l.template && l.template.name], ['סיבת סגירה', l.closedAt && l.closedReason], ['סטטוס מייל', STATUS[l.emailStatus] || l.emailStatus],
         ['נשלח לאחרונה', fmt(l.lastEmailedAt)], ['פתיחות / הקלקות', `${l.openCount || 0} / ${l.clickCount || 0}`], ['תזכורות', `${l.reminderCount || 0}${l.lastReminderAt ? ` (אחרונה ${fmt(l.lastReminderAt)})` : ''}`], ['קוד גישה', l.accessCode ? `${l.accessCode} (${fmt(l.codeSentAt)})` : ''], ['השיב', fmt(l.repliedAt)]].map(row).join('')}
     </div>
     <div class="toolbar wrap" style="margin:10px 0">
@@ -436,8 +436,12 @@ async function openCard(id) {
   $('#cd-del').onclick = () => deleteLead(id);
   $('#cd-close-lead').onclick = async () => {
     const closing = !l.closedAt;
-    if (closing && !confirm(`לסגור את "${l.organization}"? לא יישלחו אליו תזכורות או מיילים. אפשר לפתוח מחדש.`)) return;
-    try { await api('/leads/close', { method: 'POST', body: { ids: [id], closed: closing } }); await load(); toast(closing ? 'הליד נסגר' : 'הליד נפתח מחדש'); openCard(id); } catch (e) { toast(e.message, true); }
+    let reason = null;
+    if (closing) {
+      reason = prompt(`סיבת הסגירה של "${l.organization}" (למשל: לא מעוניין, אין תקציב, בחרו פתרון אחר). הליד ייסגר גם בדואר ובכל סבב, ואפשר לפתוח מחדש.`, 'לא מעוניין');
+      if (reason === null) return;
+    }
+    try { await api('/leads/close', { method: 'POST', body: { ids: [id], closed: closing, reason } }); await load(); toast(closing ? 'הליד נסגר' : 'הליד נפתח מחדש'); openCard(id); } catch (e) { toast(e.message, true); }
   };
   const saveFu = async (v) => { try { await api(`/leads/${id}`, { method: 'PUT', body: { followUpAt: v } }); await load(); toast('נשמר'); openCard(id); } catch (e) { toast(e.message, true); } };
   $('#cd-fu-save').onclick = () => saveFu($('#cd-fu').value || null);

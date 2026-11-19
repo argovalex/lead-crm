@@ -630,9 +630,9 @@ const KIND_LABEL = { campaign: 'קמפיין', manual: 'אישי', reply: 'תש�
 const MSTATUS = { QUEUED: 'בתור', SENDING: 'נשלח כעת', DRAFT: 'ממתין לאישור' };
 
 async function renderMail(forceThread = false) {
-  const rows = await api('/mailbox');
+  const rows = await api(mailFilter === 'closed' ? '/mailbox?closed=1' : '/mailbox');
   const q = $('#mail-q').value.trim().toLowerCase();
-  const ok = (r) => (mailFilter === 'all' || (mailFilter === 'await' && r.awaiting) || (mailFilter === 'replied' && r.replies > 0)
+  const ok = (r) => (mailFilter === 'all' || mailFilter === 'closed' || (mailFilter === 'await' && r.awaiting) || (mailFilter === 'replied' && r.replies > 0)
     || (mailFilter === 'campaign' && r.campaign > 0) || (mailFilter === 'manual' && r.sent - r.campaign > 0))
     && (!q || `${r.lead.name} ${r.lead.email} ${r.lead.company || ''}`.toLowerCase().includes(q));
   const list = rows.filter(ok);
@@ -662,7 +662,7 @@ async function renderThread(leadId) {
     <div class="th-head">
       <div><h2>${esc(lead.name)}</h2><div class="muted" dir="ltr">${esc(lead.email)}${lead.company ? ` · ${esc(lead.company)}` : ''}</div></div>
       <div class="th-acts"><span class="pill" style="--c:var(--s-${lead.stage})">${STAGE_LABELS[lead.stage]}</span>
-        <button class="btn sm" data-t="done" title="סיימתי עם השיחה: מוריד אותה מ'להשיב' וממשימות המעקב">✓ טופל</button><button class="btn sm" data-t="card">פתח כרטיס</button><button class="btn sm danger" data-t="del">מחיקה</button></div>
+        ${lead.stage === 'LOST' ? '<button class="btn sm" data-t="reopen">↺ פתח מחדש</button>' : '<button class="btn sm danger" data-t="close" title="סגירה מכל סיבה: הליד נשאר ברשימת הלידים, יוצא מהדואר, מהמשימות ומכל סבב">⛔ סגור ליד</button>'}<button class="btn sm" data-t="done" title="סיימתי עם השיחה: מוריד אותה מ'להשיב' וממשימות המעקב">✓ טופל</button><button class="btn sm" data-t="card">פתח כרטיס</button><button class="btn sm danger" data-t="del">מחיקה</button></div>
     </div>
     <div class="th-body">${items.length ? items.map((i) => `
       <div class="bub ${i.dir}">
@@ -678,6 +678,16 @@ async function renderThread(leadId) {
   </div>`;
   const body = $('#mail-thread .th-body');
   body.scrollTop = body.scrollHeight;
+  const closeBtn = $('#mail-thread [data-t="close"]');
+  if (closeBtn) closeBtn.onclick = async () => {
+    const reason = prompt('סיבת הסגירה (למשל: לא מעוניין, אין תקציב, בחרו פתרון אחר, פיתחו בעצמם):', 'לא מעוניין');
+    if (reason === null) return;
+    try { await api(`/leads/${leadId}/close`, { method: 'POST', body: { reason } }); toast('הליד נסגר ויצא מהדואר ומכל סבב'); mailSel = null; renderMail(true); } catch (err) { fail(err); }
+  };
+  const reopenBtn = $('#mail-thread [data-t="reopen"]');
+  if (reopenBtn) reopenBtn.onclick = async () => {
+    try { await api(`/leads/${leadId}/close`, { method: 'POST', body: { closed: false } }); toast('הליד נפתח מחדש'); mailFilter = 'all'; mailSel = leadId; renderMail(true); } catch (err) { fail(err); }
+  };
   $('#mail-thread [data-t="done"]').onclick = async () => {
     try { await api(`/leads/${leadId}`, { method: 'PATCH', body: { nextFollowUpAt: null, nextAction: '' } }); toast('השיחה סומנה כטופלה'); renderMail(true); } catch (err) { fail(err); }
   };

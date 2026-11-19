@@ -6,7 +6,7 @@ const { getProvider } = require('../services/provider');
 const { renderRich, renderPlain, htmlToText } = require('../services/render');
 const { suggestReply } = require('../services/suggest');
 const reminders = require('../services/gmdssReminders');
-const { VARIABLES, merge, parseCsv, importRows, logActivity, syncReplies } = require('../services/gmdss');
+const { VARIABLES, merge, parseCsv, importRows, logActivity, syncReplies, closeEverywhere } = require('../services/gmdss');
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -57,11 +57,20 @@ router.post('/leads/close', wrap(async (req, res) => {
   const ids = ((req.body && req.body.ids) || []).map(Number).filter(Number.isInteger);
   if (!ids.length) throw bad('no_leads_selected');
   const closed = !(req.body && req.body.closed === false);
-  const rows = await prisma.gmdssLead.findMany({ where: { id: { in: ids }, closedAt: closed ? null : { not: null } }, select: { id: true } });
-  const now = new Date();
-  await prisma.gmdssLead.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { closedAt: closed ? now : null, ...(closed ? { followUpAt: null } : {}) } });
-  for (const r of rows) await logActivity(prisma, r.id, closed ? 'closed' : 'reopened', closed ? 'הליד נסגר. תזכורות ושליחות הופסקו.' : 'הליד נפתח מחדש.');
-  res.json({ updated: rows.length });
+  const reason = String((req.body && req.body.reason) || '').trim().slice(0, 200) || null;
+  // The same status applies to the main-CRM lead with the same address (mail list, to-do, sequences).
+  const all = await prisma.gmdssLead.findMany({ where: { id: { in: ids } }, select: { id: true, email: true, closedAt: true, closedReason: true } });
+  let updated = 0;
+  for (const l of all) {
+    if (l.email) await closeEverywhere(prisma, [l.email], { closed, reason });
+    else if (closed !== !!l.closedAt) {
+      await prisma.gmdssLead.update({ where: { id: l.id }, data: { closedAt: closed ? new Date() : null, closedReason: closed ? reason : null, ...(closed ? { followUpAt: null } : {}) } });
+      await logActivity(prisma, l.id, closed ? 'closed' : 'reopened', closed ? `הליד נסגר${reason ? `: ${reason}` : ''}.` : 'הליד נפתח מחדש.');
+    }
+    if (closed && l.closedAt && reason && !l.closedReason) await prisma.gmdssLead.update({ where: { id: l.id }, data: { closedReason: reason } });
+    if (closed !== !!l.closedAt) updated += 1;
+  }
+  res.json({ updated });
 }));
 
 router.post('/leads/delete', wrap(async (req, res) => {

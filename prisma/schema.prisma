@@ -186,6 +186,7 @@ model GmdssLead {
   codeSentAt    DateTime? @map("code_sent_at")
   accessCode    String?   @map("access_code")
   closedAt      DateTime? @map("closed_at")
+  closedReason  String?   @map("closed_reason")
   activities    GmdssActivity[]
 
   @@map("gmdss_leads")

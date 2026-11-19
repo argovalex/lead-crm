@@ -167,6 +167,39 @@ ${String(m.body || '').slice(0, 5000)}`.trim(), m.sentAt);
   }
 }
 
+// One "closed" status across both screens. Closing a lead (from the GMDSS card or from the mail screen) moves
+// the main-CRM lead with the same address to LOST (it leaves the mail list, the to-do list and every sequence)
+// and closes the GMDSS lead (no reminders, no mass sends). Both stay in the leads lists.
+async function closeEverywhere(prisma, emails, { closed = true, reason = null } = {}) {
+  const addrs = [...new Set((emails || []).flatMap((e) => parseEmails(e)))];
+  if (!addrs.length) return { main: 0, gmdss: 0 };
+  const now = new Date();
+  const main = await prisma.lead.findMany({ where: { email: { in: addrs, mode: 'insensitive' } } });
+  for (const l of main) {
+    if (closed) {
+      if (l.stage !== 'LOST') await prisma.activity.create({ data: { leadId: l.id, type: 'STAGE_CHANGED', data: { from: l.stage, to: 'LOST', reason: reason || 'closed' } } });
+      await prisma.lead.update({ where: { id: l.id }, data: { stage: 'LOST', nextAction: null, nextFollowUpAt: null } });
+      await prisma.enrollment.updateMany({ where: { leadId: l.id, status: 'ACTIVE' }, data: { status: 'STOPPED', stopReason: 'closed', nextRunAt: null } });
+      await prisma.emailMessage.updateMany({ where: { leadId: l.id, status: { in: ['QUEUED', 'DRAFT'] } }, data: { status: 'CANCELLED', lastError: 'closed' } });
+    } else if (l.stage === 'LOST') {
+      await prisma.activity.create({ data: { leadId: l.id, type: 'STAGE_CHANGED', data: { from: 'LOST', to: 'CONTACTED', reason: 'reopened' } } });
+      await prisma.lead.update({ where: { id: l.id }, data: { stage: 'CONTACTED' } });
+    }
+  }
+  const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, closedAt: true, closedReason: true } }))
+    .filter((l) => parseEmails(l.email).some((e) => addrs.includes(e)));
+  for (const l of gl) {
+    if (closed && !l.closedAt) {
+      await prisma.gmdssLead.update({ where: { id: l.id }, data: { closedAt: now, closedReason: reason || null, followUpAt: null } });
+      await logActivity(prisma, l.id, 'closed', `הליד נסגר${reason ? `: ${reason}` : ''}. תזכורות ושליחות הופסקו.`);
+    } else if (!closed && l.closedAt) {
+      await prisma.gmdssLead.update({ where: { id: l.id }, data: { closedAt: null, closedReason: null } });
+      await logActivity(prisma, l.id, 'reopened', 'הליד נפתח מחדש.');
+    }
+  }
+  return { main: main.length, gmdss: gl.length };
+}
+
 async function handleGmdssEvent(prisma, event, now = new Date()) {
   const d = event.data || {};
   if (!d.email_id) return false;
@@ -186,4 +219,4 @@ async function handleGmdssEvent(prisma, event, now = new Date()) {
   return true;
 }
 
-module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, closeEverywhere, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };

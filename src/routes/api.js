@@ -110,6 +110,17 @@ router.delete('/leads/:id', wrap(async (req, res) => {
   res.status(204).end();
 }));
 
+// Close a lead for any reason (not interested, no budget...) or reopen it. It stays in the leads list but leaves
+// the mail list, the to-do list and every sequence; the GMDSS lead with the same address is closed too.
+router.post('/leads/:id/close', wrap(async (req, res) => {
+  const lead = await prisma.lead.findUnique({ where: { id: id(req.params.id) } });
+  if (!lead) return res.status(404).json({ error: 'not_found' });
+  const closed = !(req.body && req.body.closed === false);
+  const reason = String((req.body && req.body.reason) || '').trim().slice(0, 200) || null;
+  if (closed) await leads.logActivity(lead.id, 'NOTE', { text: `נסגר${reason ? `: ${reason}` : ''}` });
+  res.json(await require('../services/gmdss').closeEverywhere(prisma, [lead.email], { closed, reason }));
+}));
+
 router.post('/leads/:id/stage', wrap(async (req, res) => {
   res.json(await leads.changeStage(id(req.params.id), req.body.stage));
 }));
@@ -450,7 +461,8 @@ const mailItems = (msgs, acts) => [
 const MSG_SEL = { leadId: true, subject: true, body: true, enrollmentId: true, status: true, createdAt: true, sentAt: true, openedAt: true, clickedAt: true };
 const MSG_OK = { in: ['SENT', 'QUEUED', 'SENDING', 'DRAFT'] };
 
-router.get('/mailbox', wrap(async (_req, res) => {
+router.get('/mailbox', wrap(async (req, res) => {
+  const showClosed = req.query.closed === '1';
   const [msgs, acts] = await Promise.all([
     prisma.emailMessage.findMany({ where: { status: { in: MSG_OK.in } }, orderBy: { createdAt: 'desc' }, take: 800, select: MSG_SEL }),
     prisma.activity.findMany({ where: { type: { in: MAIL_ACTS } }, orderBy: { createdAt: 'desc' }, take: 800, select: { leadId: true, type: true, data: true, createdAt: true } }),
@@ -465,7 +477,7 @@ router.get('/mailbox', wrap(async (_req, res) => {
     byLead.set(it.leadId, c);
   });
   const rows = await prisma.lead.findMany({ where: { id: { in: [...byLead.keys()] } }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, nextAction: true, unsubscribed: true, bounced: true } });
-  const out = rows.map((l) => {
+  const out = rows.filter((l) => (l.stage === 'LOST') === showClosed).map((l) => {
     const c = byLead.get(l.id);
     return { lead: l, replies: c.replies, sent: c.sent, campaign: c.campaign, pending: c.pending, awaiting: l.replied && l.nextAction === 'להשיב', last: { dir: c.last.dir, kind: c.last.kind, subject: c.last.subject, snippet: snip(c.last.body), at: c.last.at } };
   }).sort((a, b) => new Date(b.last.at) - new Date(a.last.at));
