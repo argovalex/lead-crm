@@ -129,6 +129,7 @@ async function logReply(prisma, email, subject, body, now = new Date()) {
 // Replies that the main CRM already stored (REPLY_IN) become GMDSS timeline entries, so the card and the
 // reply suggestion always see what the lead actually wrote, including replies received before this existed.
 async function syncReplies(prisma) {
+  await syncSentMail(prisma).catch((e) => console.error('gmdss sent-mail sync failed', e.message));
   const emails = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, repliedAt: true } }));
   if (!emails.length) return;
   const byEmail = new Map(emails.flatMap((l) => parseEmails(l.email).map((e) => [e, l])));
@@ -144,6 +145,25 @@ async function syncReplies(prisma) {
     const d = a.data || {};
     await logActivity(prisma, l.id, 'replied', `${d.subject || ''}${d.body ? `\n${String(d.body).slice(0, 5000)}` : ''}`.trim(), a.createdAt);
     if (!l.repliedAt || l.repliedAt < a.createdAt) { l.repliedAt = a.createdAt; await prisma.gmdssLead.update({ where: { id: l.id }, data: { repliedAt: a.createdAt } }); }
+  }
+}
+
+// Mail Alex sent by hand from the main mail screen (#/mail, no sequence) to a GMDSS lead's address becomes a
+// "reply_sent" entry in that lead's card, so one-to-one correspondence is never split between the two screens.
+async function syncSentMail(prisma) {
+  const emails = await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true } });
+  if (!emails.length) return;
+  const byEmail = new Map(emails.flatMap((l) => parseEmails(l.email).map((e) => [e, l])));
+  const msgs = await prisma.emailMessage.findMany({
+    where: { status: 'SENT', enrollmentId: null, sentAt: { not: null }, lead: { email: { in: [...byEmail.keys()] } } },
+    include: { lead: { select: { email: true } } }, orderBy: { sentAt: 'asc' },
+  });
+  for (const m of msgs) {
+    const l = byEmail.get(m.lead.email.toLowerCase());
+    if (!l) continue;
+    if (await prisma.gmdssActivity.findFirst({ where: { leadId: l.id, type: 'reply_sent', createdAt: m.sentAt } })) continue;
+    await logActivity(prisma, l.id, 'reply_sent', `${m.subject || ''}
+${String(m.body || '').slice(0, 5000)}`.trim(), m.sentAt);
   }
 }
 
@@ -166,4 +186,4 @@ async function handleGmdssEvent(prisma, event, now = new Date()) {
   return true;
 }
 
-module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
