@@ -136,7 +136,7 @@ router.post('/leads/:id/suggest', wrap(async (req, res) => {
   if (!lead) throw bad('not_found', 404);
   const items = await threadFor(lead);
   if (!items.length) throw bad('no_conversation_yet');
-  res.json(await suggestReply({ name: lead.organization, company: lead.country }, items, { followUp: true }));
+  res.json(await suggestReply({ name: lead.organization, company: lead.country, contactName: lead.contactName }, items, { followUp: true }));
 }));
 
 // Send a one-to-one reply from the card and keep it in the timeline. Pushes the follow-up date out by the default.

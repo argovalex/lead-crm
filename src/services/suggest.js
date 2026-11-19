@@ -4,7 +4,8 @@ const MODEL = process.env.SUGGEST_MODEL || 'claude-haiku-4-5-20251001';
 const HEB = /[֐-׿]/;
 
 const SYSTEM = `You draft email replies for Alexander Argov (alargov.com), who sells maritime safety and GMDSS training.
-Write the reply to the LAST received message in the conversation.
+Write the reply to the LAST received message in the conversation. Respond to what that person actually wrote: quote or paraphrase their specific point, objection or question in the first sentence, and never open with generic thanks. If they declined, acknowledge their reason and leave the door open politely, with no pitch.
+Product facts you may use: a browser-based interactive VHF-DSC radio simulator (no install) and an Introduction to GMDSS video course with a 210-question test bank, at https://www.alargov.com. Alex is a skipper and maritime instructor with decades at sea.
 Rules: same language as the last received message. Short and direct, 3 to 6 sentences. Answer exactly what was asked, then propose one concrete next step (a call, a date, sending details). No filler, no flattery, no em dashes. Do not write a signature or a subject line (the signature is added automatically). Never invent prices, dates, discounts or facts: if the answer needs data you do not have, write it in square brackets, for example [מחיר] or [date]. Output only the email body.`;
 
 const SYSTEM_FUP = `You draft email follow-ups for Alexander Argov (alargov.com), who sells maritime safety and GMDSS training.
@@ -12,11 +13,11 @@ Write a short follow-up to the LAST email Alex sent, which has had no reply yet.
 Rules: same language as that email. 2 to 4 sentences, polite and direct, one concrete next step (a short online demo or a question). No filler, no flattery, no em dashes, no pressure. Do not write a signature or a subject line (the signature is added automatically). Never invent prices, dates, discounts or facts: use square brackets for anything you do not know. Output only the email body.`;
 
 function template(lead, lastIn) {
-  const first = String(lead.name || '').split(/\s+/)[0] || '';
+  const first = String(lead.contactName || '').trim().split(/\s+/)[0] || '';
   const he = HEB.test(lastIn ? `${lastIn.subject} ${lastIn.body}` : lead.name || '');
   return he
-    ? `שלום ${first},\nתודה על התשובה.\n[תשובה לשאלה שלך]\nמתאים לך שנקבע שיחה קצרה השבוע כדי לסגור את הפרטים?`
-    : `Hi ${first},\nThanks for getting back to me.\n[answer to the question]\nWould a short call this week work to close the details?`;
+    ? `שלום${first ? ' ' + first : ''},\nתודה על התשובה.\n[תשובה לשאלה שלך]\nמתאים לך שנקבע שיחה קצרה השבוע כדי לסגור את הפרטים?`
+    : `Hi${first ? ' ' + first : ''},\nThanks for getting back to me.\n[answer to the question]\nWould a short call this week work to close the details?`;
 }
 
 // items: thread items in ascending order (dir 'in'|'out', subject, body, at).
@@ -32,7 +33,7 @@ async function suggestReply(lead, items, opts = {}) {
       headers: { 'content-type': 'application/json', 'x-api-key': config.anthropicKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: MODEL, max_tokens: 700, system: fup ? SYSTEM_FUP : SYSTEM,
-        messages: [{ role: 'user', content: `Lead: ${lead.name}${lead.company ? `, ${lead.company}` : ''}\n\nConversation:\n\n${convo}\n\n${fup ? 'Write the follow-up now.' : 'Write the reply now.'}` }],
+        messages: [{ role: 'user', content: `Lead: ${lead.name}${lead.contactName ? ` (contact: ${lead.contactName})` : ''}${lead.company ? `, ${lead.company}` : ''}\n\nConversation:\n\n${convo}\n\n${fup ? 'Write the follow-up now.' : 'Write the reply now.'}` }],
       }),
       signal: AbortSignal.timeout(25000),
     });

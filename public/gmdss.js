@@ -480,7 +480,8 @@ async function openCard(id) {
     try {
       const r = await api(`/leads/${id}/suggest`, { method: 'POST', body: {} });
       $('#cd-rbody').value = r.text;
-      $('#cd-rhint').textContent = r.source === 'ai' ? (acts.some((a) => a.type === 'replied') ? 'טיוטה שעונה לתשובה שלהם. לעבור ולערוך לפני שליחה.' : 'הם עוד לא השיבו, אז זו טיוטת מעקב. לעבור ולערוך לפני שליחה.') : 'תבנית בסיסית (מפתח ה-AI חסר או לא זמין). לערוך לפני שליחה.';
+      $('#cd-rhint').textContent = r.source === 'ai' ? (acts.some((a) => a.type === 'replied') ? 'טיוטה שעונה לתשובה שלהם. לעבור ולערוך לפני שליחה.' : 'הם עוד לא השיבו, אז זו טיוטת מעקב. לעבור ולערוך לפני שליחה.') : `תבנית גנרית, לא תשובה לתוכן שלהם: ניסוח ה-AI נכשל${r.error ? ` (${r.error}${r.error === 'llm_401' ? ': מפתח ANTHROPIC_API_KEY ב-Railway חסר או לא תקין' : ''})` : ''}.`;
+      if (r.source !== 'ai') toast('ה-AI לא זמין, זו תבנית גנרית', true);
     } catch (e) { $('#cd-rhint').textContent = ''; toast(e.message, true); }
     b.disabled = false;
   };
