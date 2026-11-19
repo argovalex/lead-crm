@@ -662,7 +662,7 @@ async function renderThread(leadId) {
     <div class="th-head">
       <div><h2>${esc(lead.name)}</h2><div class="muted" dir="ltr">${esc(lead.email)}${lead.company ? ` · ${esc(lead.company)}` : ''}</div></div>
       <div class="th-acts"><span class="pill" style="--c:var(--s-${lead.stage})">${STAGE_LABELS[lead.stage]}</span>
-        <button class="btn sm" data-t="card">פתח כרטיס</button><button class="btn sm danger" data-t="del">מחיקה</button></div>
+        <button class="btn sm" data-t="done" title="סיימתי עם השיחה: מוריד אותה מ'להשיב' וממשימות המעקב">✓ טופל</button><button class="btn sm" data-t="card">פתח כרטיס</button><button class="btn sm danger" data-t="del">מחיקה</button></div>
     </div>
     <div class="th-body">${items.length ? items.map((i) => `
       <div class="bub ${i.dir}">
@@ -678,6 +678,9 @@ async function renderThread(leadId) {
   </div>`;
   const body = $('#mail-thread .th-body');
   body.scrollTop = body.scrollHeight;
+  $('#mail-thread [data-t="done"]').onclick = async () => {
+    try { await api(`/leads/${leadId}`, { method: 'PATCH', body: { nextFollowUpAt: null, nextAction: '' } }); toast('השיחה סומנה כטופלה'); renderMail(true); } catch (err) { fail(err); }
+  };
   $('#mail-thread [data-t="card"]').onclick = () => openLead(leadId);
   $('#mail-thread [data-t="del"]').onclick = () => confirmDelete([leadId], lead.name);
   const f = $('#th-form');
