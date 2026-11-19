@@ -25,8 +25,8 @@ const ENG = {
   clicked: (l) => !!l.clickedAt,
   unopened: (l) => l.emailStatus === 'sent' && !l.openedAt,
   failed: (l) => ['failed', 'bounced'].includes(l.emailStatus),
-  replied: (l) => !!l.repliedAt,
-  answered: (l) => !!l.answeredAt,
+  replied: (l) => !!l.repliedAt && !l.closedAt, // closed leads are out of every round
+  answered: (l) => !!l.answeredAt && !l.closedAt,
   reminded: (l) => (l.reminderCount || 0) > 0,
   manualRem: (l) => !!l.manualReminderAt,
   followup: isDue,
