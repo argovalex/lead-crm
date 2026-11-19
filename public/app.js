@@ -496,7 +496,12 @@ $('#today').addEventListener('click', async (e) => {
   const go = e.target.closest('[data-go]');
   if (go) return show(go.dataset.go);
   const btn = e.target.closest('[data-a]');
-  if (!btn) return;
+  if (!btn) {
+    // Tapping the lead itself (name, company, note) opens its card; links like the phone number keep working.
+    const row = e.target.closest('.fu-item');
+    if (row && !e.target.closest('a')) openLead(+row.dataset.id);
+    return;
+  }
   const card = btn.closest('[data-id]');
   const leadId = +card.dataset.id;
   try {
