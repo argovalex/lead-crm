@@ -39,6 +39,9 @@ async function build(lead, subject, body, { footer = true } = {}) {
 
 router.get('/variables', (_req, res) => res.json({ variables: VARIABLES, emailConfigured: !notConfigured(), setupMessage: notConfigured() ? NOT_CONFIGURED_MSG : null }));
 
+// Unsent email drafts from the card, one per lead, kept in the settings table (key gmdssDraft:<id>).
+const DRAFT = 'gmdssDraft:';
+
 router.get('/leads', wrap(async (_req, res) => {
   try { await syncReplies(prisma); } catch (e) { console.error('gmdss reply sync failed', e.message); }
   const rows = await prisma.gmdssLead.findMany({ orderBy: { id: 'asc' }, include: { template: { select: { id: true, name: true } } } });
@@ -48,7 +51,8 @@ router.get('/leads', wrap(async (_req, res) => {
   // Reminders sent by hand from the card are logged with a "[ידני]" prefix; automatic ones are not.
   const man = await prisma.gmdssActivity.groupBy({ by: ['leadId'], where: { type: 'reminder', detail: { startsWith: '[ידני]' } }, _max: { createdAt: true } });
   const manual = new Map(man.map((o) => [o.leadId, o._max.createdAt]));
-  res.json(rows.map((l) => ({ ...l, answeredAt: answered.get(l.id) || null, manualReminderAt: manual.get(l.id) || null })));
+  const drafts = new Set((await prisma.setting.findMany({ where: { key: { startsWith: DRAFT } }, select: { key: true } })).map((d) => Number(d.key.slice(DRAFT.length))));
+  res.json(rows.map((l) => ({ ...l, answeredAt: answered.get(l.id) || null, manualReminderAt: manual.get(l.id) || null, hasDraft: drafts.has(l.id) })));
 }));
 
 // Manual lead from a link: returns a draft for review (nothing is saved here).
@@ -211,7 +215,29 @@ router.post('/leads/:id/reply', wrap(async (req, res) => {
   const sent = await getProvider().send({ to: parseEmails(lead.email), subject, html, text: plain, idempotencyKey: `gmdss-reply:${lead.id}:${Date.now()}` });
   await logActivity(prisma, lead.id, first ? 'first_sent' : 'reply_sent', `${subject}\n${text}`);
   await prisma.gmdssLead.update({ where: { id: lead.id }, data: { followUpAt: new Date(Date.now() + FUP_DAYS * 86400000), ...(first ? { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null, ...(sent && sent.providerId ? { providerId: sent.providerId } : {}) } : {}) } });
+  await prisma.setting.deleteMany({ where: { key: `${DRAFT}${lead.id}` } });
   res.json({ sentTo: lead.email });
+}));
+
+router.get('/leads/:id/draft', wrap(async (req, res) => {
+  const row = await prisma.setting.findUnique({ where: { key: `${DRAFT}${Number(req.params.id)}` } });
+  let d = null;
+  try { d = row ? JSON.parse(row.value) : null; } catch { d = null; }
+  res.json(d);
+}));
+router.put('/leads/:id/draft', wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!(await prisma.gmdssLead.findUnique({ where: { id } }))) throw bad('not_found', 404);
+  const subject = String((req.body && req.body.subject) || ''), body = String((req.body && req.body.body) || '');
+  const key = `${DRAFT}${id}`;
+  if (!subject.trim() && !body.trim()) { await prisma.setting.deleteMany({ where: { key } }); return res.json(null); }
+  const value = JSON.stringify({ subject: subject.slice(0, 500), body: body.slice(0, 20000), savedAt: new Date().toISOString() });
+  await prisma.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+  res.json(JSON.parse(value));
+}));
+router.delete('/leads/:id/draft', wrap(async (req, res) => {
+  await prisma.setting.deleteMany({ where: { key: `${DRAFT}${Number(req.params.id)}` } });
+  res.json({ ok: true });
 }));
 
 // ---------- Reminders (opens/clicks drive the wording) and access codes ----------

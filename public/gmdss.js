@@ -99,7 +99,7 @@ function cell(l, k) {
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
-  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a></div>${l.contactName ? `<div class="why" dir="ltr" style="text-align:start">👤 ${esc(l.contactName)}</div>` : ''}${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
+  if (k === 'organization') return `<div class="org"><button class="btn sm ed" data-edit="${l.id}" title="ערוך ליד">✎</button><a href="#" data-card="${l.id}">${esc(v)}</a>${l.hasDraft ? '<span class="st queued" title="יש טיוטה שמורה בכרטיס">📝 טיוטה</span>' : ''}</div>${l.contactName ? `<div class="why" dir="ltr" style="text-align:start">👤 ${esc(l.contactName)}</div>` : ''}${l.whyTheydBuy ? `<div class="why" title="${esc(l.whyTheydBuy)}">${esc(l.whyTheydBuy)}</div>` : ''}`;
   if (k === 'followUpAt') { const due = isDue(l); return `<span class="st ${due ? 'failed' : ''}" title="${due ? 'הגיע מועד המעקב' : 'מעקב מתוכנן'}">${esc(dayHe(v))}</span>`; }
   if (k === 'productFit') return esc(FIT[v] || v);
   if (k === 'priority') return `<span class="pb ${esc(v)}">${esc(v)}</span>`;
@@ -504,6 +504,8 @@ async function openCard(id) {
   // Never mailed: the box writes the first email (optionally from the lead's attached template), not a reply.
   const fresh = l.emailStatus !== 'sent' && !acts.some((a) => ['sent', 'first_sent', 'reply_sent'].includes(a.type));
   const ftpl = fresh ? templates.find((t) => t.id === l.templateId) : null;
+  let draft = null;
+  try { draft = await api(`/leads/${id}/draft`); } catch { /* no draft */ }
   const defSubject = ftpl ? ftpl.subject : base ? (/^re:/i.test(base) ? base : `Re: ${base}`) : '';
   const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
   const row = ([h, v]) => (v ? `<div style="display:flex;gap:8px"><span class="muted" style="min-width:110px">${h}</span><span dir="ltr">${esc(v)}</span></div>` : '');
@@ -531,7 +533,9 @@ async function openCard(id) {
     <div class="toolbar wrap" style="margin:6px 0 4px">
       <button class="btn sm${fresh ? ' hidden' : ''}" id="cd-suggest">✨ הצעת תשובה</button>
       <button class="btn primary sm" id="cd-rsend" ${l.email ? '' : 'disabled'}>${fresh ? 'שליחת מייל ל-' : 'שליחת תשובה ל-'}<span dir="ltr">${esc(l.email || '')}</span></button>
-      <span class="muted" id="cd-rhint" style="font-size:12px"></span>
+      <button class="btn sm" id="cd-dsave">💾 שמירת טיוטה</button>
+      <button class="btn ghost sm${draft ? '' : ' hidden'}" id="cd-ddel">מחיקת טיוטה</button>
+      <span class="muted" id="cd-rhint" style="font-size:12px">${draft ? `טיוטה שמורה מ-${esc(fmt(draft.savedAt))}` : ''}</span>
     </div>
     <label style="margin-top:12px">הוספת הערה (שיחה, פגישה, תשובה, כל דבר)
       <textarea id="cd-note" rows="2" dir="ltr" style="width:100%"></textarea></label>
@@ -543,7 +547,21 @@ async function openCard(id) {
           <b>${ico} ${lab}</b>${a.detail ? `<div dir="ltr" style="white-space:pre-wrap;color:#444">${esc(a.detail)}</div>` : ''}</div>`; }).join('')
         || '<div class="muted" style="padding:10px">אין עדיין פעילות</div>'}
     </div>`);
+  if (draft) { $('#cd-rsub').value = draft.subject; $('#cd-rbody').value = draft.body; }
   const crRefresh = wireTools('cr', '#cd-rsub', '#cd-rbody', id);
+  $('#cd-dsave').onclick = async () => {
+    try {
+      const d = await api(`/leads/${id}/draft`, { method: 'PUT', body: { subject: $('#cd-rsub').value, body: $('#cd-rbody').value } });
+      $('#cd-rhint').textContent = d ? `הטיוטה נשמרה ${fmt(d.savedAt)}` : 'אין מה לשמור';
+      $('#cd-ddel').classList.toggle('hidden', !d);
+      if (l.hasDraft !== !!d) { l.hasDraft = !!d; render(); }
+      toast(d ? 'הטיוטה נשמרה' : 'הטיוטה ריקה');
+    } catch (e) { toast(e.message, true); }
+  };
+  $('#cd-ddel').onclick = async () => {
+    if (!confirm('למחוק את הטיוטה השמורה?')) return;
+    try { await api(`/leads/${id}/draft`, { method: 'DELETE' }); l.hasDraft = false; render(); openCard(id); toast('הטיוטה נמחקה'); } catch (e) { toast(e.message, true); }
+  };
   $('#cd-close').onclick = dlgClose;
   $('#cd-edit').onclick = () => editLead(id);
   $('#cd-del').onclick = () => deleteLead(id);
