@@ -81,8 +81,9 @@ function filtered() {
 function engagement(l) {
   const pill = (on, ico, label, title) => `<span class="eg ${on ? 'on' : ''}" title="${esc(title)}">${ico} ${label}</span>`;
   return `<span class="egs">${pill(l.deliveredAt, '✓', 'נמסר', l.deliveredAt ? `נמסר ${fmt(l.deliveredAt)}` : 'עוד לא נמסר')}`
-    + `${pill(l.openedAt, '👁', l.openCount > 1 ? `נפתח ${l.openCount}x` : 'נפתח', l.openedAt ? `נפתח ${fmt(l.openedAt)} (${l.openCount}x)` : 'לא נפתח')}`
-    + `${pill(l.clickedAt, '↗', l.clickCount > 1 ? `הקלקה ${l.clickCount}x` : 'הקלקה', l.clickedAt ? `הקלקה ${fmt(l.clickedAt)} (${l.clickCount}x) ${l.lastClickLink || ''}` : 'אין הקלקה על קישור')}</span>`;
+    + `${pill(l.openedAt, '👁', l.openCount > 1 ? `נפתח ${l.openCount}x` : 'נפתח', l.openedAt ? `נפתח לאחרונה ${fmt(l.lastOpenedAt || l.openedAt)} · פעם ראשונה ${fmt(l.openedAt)} (${l.openCount}x)` : 'לא נפתח')}`
+    + `${pill(l.clickedAt, '↗', l.clickCount > 1 ? `הקלקה ${l.clickCount}x` : 'הקלקה', l.clickedAt ? `הקלקה אחרונה ${fmt(l.lastClickedAt || l.clickedAt)} · ראשונה ${fmt(l.clickedAt)} (${l.clickCount}x) ${l.lastClickLink || ''}` : 'אין הקלקה על קישור')}</span>`
+    + (l.openedAt || l.clickedAt ? `<div class="why" style="white-space:nowrap">${l.openedAt ? `👁 ${esc(fmt(l.lastOpenedAt || l.openedAt))}` : ''}${l.openedAt && l.clickedAt ? ' · ' : ''}${l.clickedAt ? `↗ ${esc(fmt(l.lastClickedAt || l.clickedAt))}` : ''}</div>` : '');
 }
 
 function contact(l) {
@@ -176,6 +177,7 @@ function insertAt(field, text) {
   const s = field.selectionStart ?? field.value.length, e = field.selectionEnd ?? s;
   field.value = field.value.slice(0, s) + text + field.value.slice(e);
   field.focus(); field.setSelectionRange(s + text.length, s + text.length);
+  field.dispatchEvent(new Event('input'));
 }
 
 // ---------- Manual compose tools: load a template, variables, YouTube, link, live preview (same as the template editor) ----------
@@ -213,7 +215,7 @@ function wireTools(px, subSel, bodySel, leadId, { footer = false } = {}) {
     e.target.value = '';
     if (!t) return;
     if (body.value.trim() && !confirm('להחליף את הנושא והתוכן בתבנית?')) return;
-    sub.value = t.subject; body.value = t.body; refresh();
+    sub.value = t.subject; body.value = t.body; body.dispatchEvent(new Event('input'));
   };
   $(`#${px}-yt`).onclick = () => {
     const u = prompt('קישור YouTube (https://youtu.be/... או https://www.youtube.com/watch?v=...)');
@@ -549,6 +551,22 @@ async function openCard(id) {
     </div>`);
   if (draft) { $('#cd-rsub').value = draft.subject; $('#cd-rbody').value = draft.body; }
   const crRefresh = wireTools('cr', '#cd-rsub', '#cd-rbody', id);
+  let auto = null, sentDone = false, lastSaved = draft ? `${draft.subject}\u0000${draft.body}` : null;
+  const autoSave = async () => {
+    clearTimeout(auto); auto = null;
+    if (sentDone) return;
+    const subject = $('#cd-rsub') ? $('#cd-rsub').value : null, body = $('#cd-rbody') ? $('#cd-rbody').value : null;
+    if (subject === null || `${subject}\u0000${body}` === lastSaved) return;
+    try {
+      const d = await api(`/leads/${id}/draft`, { method: 'PUT', body: { subject, body } });
+      lastSaved = `${subject}\u0000${body}`;
+      if ($('#cd-rhint')) $('#cd-rhint').textContent = d ? `נשמר אוטומטית ${fmt(d.savedAt)}` : '';
+      if ($('#cd-ddel')) $('#cd-ddel').classList.toggle('hidden', !d);
+      if (l.hasDraft !== !!d) { l.hasDraft = !!d; render(); }
+    } catch { if ($('#cd-rhint')) $('#cd-rhint').textContent = 'השמירה האוטומטית נכשלה'; }
+  };
+  const schedule = () => { clearTimeout(auto); auto = setTimeout(autoSave, 2000); };
+  $('#cd-rsub').addEventListener('input', schedule); $('#cd-rbody').addEventListener('input', schedule);
   $('#cd-dsave').onclick = async () => {
     try {
       const d = await api(`/leads/${id}/draft`, { method: 'PUT', body: { subject: $('#cd-rsub').value, body: $('#cd-rbody').value } });
@@ -562,7 +580,7 @@ async function openCard(id) {
     if (!confirm('למחוק את הטיוטה השמורה?')) return;
     try { await api(`/leads/${id}/draft`, { method: 'DELETE' }); l.hasDraft = false; render(); openCard(id); toast('הטיוטה נמחקה'); } catch (e) { toast(e.message, true); }
   };
-  $('#cd-close').onclick = dlgClose;
+  $('#cd-close').onclick = () => { if (auto) autoSave(); dlgClose(); };
   $('#cd-edit').onclick = () => editLead(id);
   $('#cd-del').onclick = () => deleteLead(id);
   $('#cd-close-lead').onclick = async () => {
@@ -618,7 +636,7 @@ async function openCard(id) {
     const b = $('#cd-suggest'); b.disabled = true; $('#cd-rhint').textContent = 'מנסח...';
     try {
       const r = await api(`/leads/${id}/suggest`, { method: 'POST', body: {} });
-      $('#cd-rbody').value = r.text; crRefresh();
+      $('#cd-rbody').value = r.text; crRefresh(); schedule();
       $('#cd-rhint').textContent = r.source === 'ai' ? (acts.some((a) => a.type === 'replied') ? 'טיוטה שעונה לתשובה שלהם. לעבור ולערוך לפני שליחה.' : 'הם עוד לא השיבו, אז זו טיוטת מעקב. לעבור ולערוך לפני שליחה.') : `תבנית גנרית, לא תשובה לתוכן שלהם: ניסוח ה-AI נכשל${r.error ? ` (${r.error}${r.error === 'llm_401' ? ': מפתח ANTHROPIC_API_KEY ב-Railway חסר או לא תקין' : ''})` : ''}.`;
       if (r.source !== 'ai') toast('ה-AI לא זמין, זו תבנית גנרית', true);
     } catch (e) { $('#cd-rhint').textContent = ''; toast(e.message, true); }
@@ -628,7 +646,8 @@ async function openCard(id) {
     const subject = $('#cd-rsub').value.trim(), body = $('#cd-rbody').value.trim();
     if (!subject || !body) { toast('חובה למלא נושא ותוכן', true); return; }
     if (!confirm(`${fresh ? 'לשלוח את המייל' : 'לשלוח את התשובה'} ל-${l.email}?`)) return;
-    try { await api(`/leads/${id}/reply`, { method: 'POST', body: { subject, body } }); toast(fresh ? 'המייל נשלח' : 'התשובה נשלחה'); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+    clearTimeout(auto); auto = null;
+    try { await api(`/leads/${id}/reply`, { method: 'POST', body: { subject, body } }); sentDone = true; toast(fresh ? 'המייל נשלח' : 'התשובה נשלחה'); await load(); openCard(id); } catch (e) { toast(e.message, true); }
   };
   $('#cd-note-add').onclick = async () => {
     const detail = $('#cd-note').value.trim();

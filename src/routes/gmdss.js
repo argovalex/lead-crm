@@ -52,7 +52,11 @@ router.get('/leads', wrap(async (_req, res) => {
   const man = await prisma.gmdssActivity.groupBy({ by: ['leadId'], where: { type: 'reminder', detail: { startsWith: '[ידני]' } }, _max: { createdAt: true } });
   const manual = new Map(man.map((o) => [o.leadId, o._max.createdAt]));
   const drafts = new Set((await prisma.setting.findMany({ where: { key: { startsWith: DRAFT } }, select: { key: true } })).map((d) => Number(d.key.slice(DRAFT.length))));
-  res.json(rows.map((l) => ({ ...l, answeredAt: answered.get(l.id) || null, manualReminderAt: manual.get(l.id) || null, hasDraft: drafts.has(l.id) })));
+  // Most recent open / click (openedAt / clickedAt keep the first one, which is often a mail scanner, not a person).
+  const lastOf = async (type) => new Map((await prisma.gmdssActivity.groupBy({ by: ['leadId'], where: { type }, _max: { createdAt: true } })).map((o) => [o.leadId, o._max.createdAt]));
+  const [lo, lc] = await Promise.all([lastOf('opened'), lastOf('clicked')]);
+  const latest = (first, act) => (first ? (act && act > first ? act : first) : null);
+  res.json(rows.map((l) => ({ ...l, answeredAt: answered.get(l.id) || null, manualReminderAt: manual.get(l.id) || null, hasDraft: drafts.has(l.id), lastOpenedAt: latest(l.openedAt, lo.get(l.id)), lastClickedAt: latest(l.clickedAt, lc.get(l.id)) })));
 }));
 
 // Manual lead from a link: returns a draft for review (nothing is saved here).
