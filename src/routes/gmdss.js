@@ -26,14 +26,14 @@ const SAMPLE = {
 const notConfigured = () => config.emailProvider !== 'mock' && (!config.resendApiKey || !config.emailFrom);
 const NOT_CONFIGURED_MSG = 'שליחת מייל לא מוגדרת: חסרים משתני סביבה RESEND_API_KEY ו-EMAIL_FROM (דומיין מאומת ב-Resend).';
 
-async function build(lead, subject, body) {
+async function build(lead, subject, body, { footer = true } = {}) {
   const s = merge(subject, lead);
   const b = merge(body, lead);
   const sig = (await settings.getAll()).signatureHtml || '';
   const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">`
     + renderRich(b.text) + (sig ? `<div style="margin-top:20px">${sig}</div>` : '')
-    + `<p style="font-size:12px;color:#888;margin-top:24px">Not interested? Reply "unsubscribe" and we will not contact you again.</p></div>`;
-  const text = `${renderPlain(b.text)}${sig ? `\n\n${htmlToText(sig)}` : ''}\n\n--\nNot interested? Reply "unsubscribe".`;
+    + (footer ? `<p style="font-size:12px;color:#888;margin-top:24px">Not interested? Reply "unsubscribe" and we will not contact you again.</p>` : '') + '</div>';
+  const text = `${renderPlain(b.text)}${sig ? `\n\n${htmlToText(sig)}` : ''}${footer ? '\n\n--\nNot interested? Reply "unsubscribe".' : ''}`;
   return { subject: s.text, html, text, unknown: [...new Set([...s.unknown, ...b.unknown])] };
 }
 
@@ -195,9 +195,11 @@ router.post('/leads/:id/reply', wrap(async (req, res) => {
   const lead = await prisma.gmdssLead.findUnique({ where: { id: Number(req.params.id) } });
   if (!lead) throw bad('not_found', 404);
   if (!lead.email || !validEmails(lead.email)) throw bad('lead_has_no_email');
-  const subject = String((req.body && req.body.subject) || '').trim();
-  const text = String((req.body && req.body.body) || '').trim();
+  const ms = merge(String((req.body && req.body.subject) || '').trim(), lead), mb = merge(String((req.body && req.body.body) || '').trim(), lead);
+  const subject = ms.text.trim(), text = mb.text.trim();
   if (!subject || !text) throw bad('subject_and_body_required');
+  const unknown = [...new Set([...ms.unknown, ...mb.unknown])];
+  if (unknown.length) throw bad(`unknown_variables: ${unknown.map((u) => `{{${u}}}`).join(', ')}`);
   if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
   const sig = (await settings.getAll()).signatureHtml || '';
   const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(text)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}</div>`;
@@ -289,9 +291,9 @@ router.post('/assign', wrap(async (req, res) => {
 }));
 
 router.post('/preview', wrap(async (req, res) => {
-  const { subject, body, leadId } = req.body || {};
+  const { subject, body, leadId, footer } = req.body || {};
   const lead = leadId ? await prisma.gmdssLead.findUnique({ where: { id: Number(leadId) } }) : null;
-  const b = await build(lead || SAMPLE, subject || '', body || '');
+  const b = await build(lead || SAMPLE, subject || '', body || '', { footer: footer !== false });
   res.json({ subject: b.subject, html: b.html, text: b.text, unknown: b.unknown, sample: !lead });
 }));
 

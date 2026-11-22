@@ -220,7 +220,7 @@ async function sendCode(id, { code, note, edit = null } = {}) {
   const c = String(code || '').trim() || newCode();
   const sig = (await settings.getAll()).signatureHtml || '';
   let { subject, body } = codeEmail(l, c, String(note || '').trim());
-  if (edit && String(edit.subject || '').trim() && String(edit.body || '').trim()) { subject = String(edit.subject).trim(); body = String(edit.body); }
+  if (edit && String(edit.subject || '').trim() && String(edit.body || '').trim()) { subject = merge(String(edit.subject).trim(), l).text; body = merge(String(edit.body), l).text; }
   const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(body)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}</div>`;
   const text = `${renderPlain(body)}${sig ? `
 

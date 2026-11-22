@@ -178,6 +178,59 @@ function insertAt(field, text) {
   field.focus(); field.setSelectionRange(s + text.length, s + text.length);
 }
 
+// ---------- Manual compose tools: load a template, variables, YouTube, link, live preview (same as the template editor) ----------
+function toolsHtml(px) {
+  return `<div class="vars">
+      <select id="${px}-tpl" aria-label="טעינת תבנית"><option value="">טעינת תבנית...</option>${templates.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
+      <button type="button" class="btn sm" id="${px}-yt">▶ סרטון YouTube</button>
+      <button type="button" class="btn sm" id="${px}-link">🔗 קישור</button>
+      ${variables.map((v) => `<button type="button" class="btn sm" data-pv="${px}" data-v="${esc(v)}">{{${esc(v)}}}</button>`).join('')}
+    </div>
+    <details id="${px}-pv"><summary class="muted" style="cursor:pointer">תצוגה מקדימה עם נתוני הליד</summary>
+      <div class="prev"><div><b>נושא:</b> <span id="${px}-psub" dir="ltr"></span></div><hr><div id="${px}-pbody" dir="ltr"></div></div></details>
+    <div id="${px}-pwarn" class="warn"></div>`;
+}
+function wireTools(px, subSel, bodySel, leadId, { footer = false } = {}) {
+  const sub = $(subSel), body = $(bodySel);
+  let last = body, timer;
+  sub.addEventListener('focus', () => { last = sub; });
+  body.addEventListener('focus', () => { last = body; });
+  const preview = async () => {
+    try {
+      const p = await api('/preview', { method: 'POST', body: { subject: sub.value, body: body.value, leadId, footer } });
+      $(`#${px}-psub`).textContent = p.subject; $(`#${px}-pbody`).innerHTML = p.html;
+      $(`#${px}-pwarn`).textContent = p.unknown.length ? `משתנים לא מוכרים: ${p.unknown.map((u) => `{{${u}}}`).join(', ')}` : '';
+    } catch (e) { $(`#${px}-pwarn`).textContent = e.message; }
+  };
+  const refresh = () => { clearTimeout(timer); timer = setTimeout(preview, 300); };
+  sub.addEventListener('input', refresh); body.addEventListener('input', refresh);
+  document.querySelectorAll(`#dlg-box [data-pv="${px}"]`).forEach((b) => {
+    b.onmousedown = (e) => e.preventDefault();
+    b.onclick = () => { insertAt(last, `{{${b.dataset.v}}}`); refresh(); };
+  });
+  $(`#${px}-tpl`).onchange = (e) => {
+    const t = templates.find((x) => x.id === +e.target.value);
+    e.target.value = '';
+    if (!t) return;
+    if (body.value.trim() && !confirm('להחליף את הנושא והתוכן בתבנית?')) return;
+    sub.value = t.subject; body.value = t.body; refresh();
+  };
+  $(`#${px}-yt`).onclick = () => {
+    const u = prompt('קישור YouTube (https://youtu.be/... או https://www.youtube.com/watch?v=...)');
+    if (!u) return;
+    if (!/^https?:\/\/(www\.)?(youtu\.be\/|youtube\.com\/)/i.test(u.trim())) { toast('לא קישור YouTube תקין', true); return; }
+    insertAt(body, `\n[video:${u.trim()}]\n`); refresh();
+  };
+  $(`#${px}-link`).onclick = () => {
+    const u = prompt('כתובת הקישור (https://...)');
+    if (!u || !/^https?:\/\//i.test(u.trim())) return;
+    const t = prompt('טקסט הקישור', 'Learn more') || u;
+    insertAt(body, `[${t}](${u.trim()})`); refresh();
+  };
+  $(`#${px}-pv`).addEventListener('toggle', preview);
+  return refresh;
+}
+
 // ---------- Template manager ----------
 const DEFAULT_SUBJECT = 'GMDSS training tools for {{Organization}}';
 const DEFAULT_BODY = `Hello,
@@ -471,6 +524,7 @@ async function openCard(id) {
     <h4 style="margin:12px 0 6px">תשובה</h4>
     <input id="cd-rsub" dir="ltr" style="width:100%;margin-bottom:6px" placeholder="נושא" value="${esc(defSubject)}">
     <textarea id="cd-rbody" rows="7" dir="ltr" style="width:100%" placeholder="כתוב כאן את התשובה, או לחץ על הצעת תשובה לקבלת טיוטה מ-Claude. החתימה נוספת אוטומטית."></textarea>
+    ${toolsHtml('cr')}
     <div class="toolbar wrap" style="margin:6px 0 4px">
       <button class="btn sm" id="cd-suggest">✨ הצעת תשובה</button>
       <button class="btn primary sm" id="cd-rsend" ${l.email ? '' : 'disabled'}>שליחת תשובה ל-<span dir="ltr">${esc(l.email || '')}</span></button>
@@ -486,6 +540,7 @@ async function openCard(id) {
           <b>${ico} ${lab}</b>${a.detail ? `<div dir="ltr" style="white-space:pre-wrap;color:#444">${esc(a.detail)}</div>` : ''}</div>`; }).join('')
         || '<div class="muted" style="padding:10px">אין עדיין פעילות</div>'}
     </div>`);
+  const crRefresh = wireTools('cr', '#cd-rsub', '#cd-rbody', id);
   $('#cd-close').onclick = dlgClose;
   $('#cd-edit').onclick = () => editLead(id);
   $('#cd-del').onclick = () => deleteLead(id);
@@ -508,7 +563,9 @@ async function openCard(id) {
       <div class="muted" style="margin-bottom:8px">אל: <span dir="ltr">${esc(pv.to)}</span> · הנוסח נבחר לפי פתיחות והקלקות (${esc(pv.segment)}). אפשר לערוך לפני שליחה, והחתימה נוספת אוטומטית.</div>
       <label>נושא<input id="rp-subject" dir="ltr" style="width:100%" value="${esc(pv.subject)}"></label>
       <label style="margin-top:8px">תוכן<textarea id="rp-body" rows="12" dir="ltr" style="width:100%">${esc(pv.body)}</textarea></label>
+      ${toolsHtml('rpt')}
       <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="rp-send">שלח עכשיו</button><button class="btn" id="rp-back">חזרה לכרטיס</button></div>`);
+    wireTools('rpt', '#rp-subject', '#rp-body', id, { footer: true });
     $('#rp-back').onclick = () => openCard(id);
     $('#rp-send').onclick = async () => {
       if (!confirm(`לשלוח את התזכורת ל-${pv.to}?`)) return;
@@ -524,8 +581,10 @@ async function openCard(id) {
       <label>קוד גישה<input id="cp-code" dir="ltr" style="width:100%" value="${esc(pv.code)}"></label>
       <label style="margin-top:8px">נושא<input id="cp-subject" dir="ltr" style="width:100%" value="${esc(pv.subject)}"></label>
       <label style="margin-top:8px">תוכן<textarea id="cp-body" rows="12" dir="ltr" style="width:100%">${esc(pv.body)}</textarea></label>
+      ${toolsHtml('cpt')}
       <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="cp-send">שלח עכשיו</button><button class="btn" id="cp-back">חזרה לכרטיס</button></div>`);
     $('#cp-code').oninput = () => { const n = $('#cp-code').value.trim(); if (n && cur) $('#cp-body').value = $('#cp-body').value.split(cur).join(n); if (n) cur = n; };
+    wireTools('cpt', '#cp-subject', '#cp-body', id);
     $('#cp-back').onclick = () => openCard(id);
     $('#cp-send').onclick = async () => {
       const code = $('#cp-code').value.trim();
@@ -538,7 +597,7 @@ async function openCard(id) {
     const b = $('#cd-suggest'); b.disabled = true; $('#cd-rhint').textContent = 'מנסח...';
     try {
       const r = await api(`/leads/${id}/suggest`, { method: 'POST', body: {} });
-      $('#cd-rbody').value = r.text;
+      $('#cd-rbody').value = r.text; crRefresh();
       $('#cd-rhint').textContent = r.source === 'ai' ? (acts.some((a) => a.type === 'replied') ? 'טיוטה שעונה לתשובה שלהם. לעבור ולערוך לפני שליחה.' : 'הם עוד לא השיבו, אז זו טיוטת מעקב. לעבור ולערוך לפני שליחה.') : `תבנית גנרית, לא תשובה לתוכן שלהם: ניסוח ה-AI נכשל${r.error ? ` (${r.error}${r.error === 'llm_401' ? ': מפתח ANTHROPIC_API_KEY ב-Railway חסר או לא תקין' : ''})` : ''}.`;
       if (r.source !== 'ai') toast('ה-AI לא זמין, זו תבנית גנרית', true);
     } catch (e) { $('#cd-rhint').textContent = ''; toast(e.message, true); }
