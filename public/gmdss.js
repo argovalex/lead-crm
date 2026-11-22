@@ -501,7 +501,10 @@ async function openCard(id) {
   const lastIn = acts.find((a) => a.type === 'replied'), lastOut = acts.find((a) => a.type === 'sent');
   const firstLine = (a) => String((a && a.detail) || '').split('\n')[0].replace(/\s+\[template:.*$/, '');
   const base = firstLine(lastIn) || firstLine(lastOut);
-  const defSubject = base ? (/^re:/i.test(base) ? base : `Re: ${base}`) : '';
+  // Never mailed: the box writes the first email (optionally from the lead's attached template), not a reply.
+  const fresh = l.emailStatus !== 'sent' && !acts.some((a) => ['sent', 'first_sent', 'reply_sent'].includes(a.type));
+  const ftpl = fresh ? templates.find((t) => t.id === l.templateId) : null;
+  const defSubject = ftpl ? ftpl.subject : base ? (/^re:/i.test(base) ? base : `Re: ${base}`) : '';
   const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
   const row = ([h, v]) => (v ? `<div style="display:flex;gap:8px"><span class="muted" style="min-width:110px">${h}</span><span dir="ltr">${esc(v)}</span></div>` : '');
   dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
@@ -521,13 +524,13 @@ async function openCard(id) {
       <button class="btn sm" id="cd-remind" ${l.email && !l.repliedAt && !l.closedAt ? '' : 'disabled'}>🔔 שלח תזכורת עכשיו</button>
       <button class="btn sm" id="cd-code" ${l.email ? '' : 'disabled'}>🔑 שלח קוד גישה</button>
     </div>
-    <h4 style="margin:12px 0 6px">תשובה</h4>
+    <h4 style="margin:12px 0 6px">${fresh ? '✉ מייל ראשון' : 'תשובה'}</h4>
     <input id="cd-rsub" dir="ltr" style="width:100%;margin-bottom:6px" placeholder="נושא" value="${esc(defSubject)}">
-    <textarea id="cd-rbody" rows="7" dir="ltr" style="width:100%" placeholder="כתוב כאן את התשובה, או לחץ על הצעת תשובה לקבלת טיוטה מ-Claude. החתימה נוספת אוטומטית."></textarea>
+    <textarea id="cd-rbody" rows="7" dir="ltr" style="width:100%" placeholder="${fresh ? 'כתוב כאן את המייל, או טען תבנית. החתימה נוספת אוטומטית.' : 'כתוב כאן את התשובה, או לחץ על הצעת תשובה לקבלת טיוטה מ-Claude. החתימה נוספת אוטומטית.'}">${esc(ftpl ? ftpl.body : '')}</textarea>
     ${toolsHtml('cr')}
     <div class="toolbar wrap" style="margin:6px 0 4px">
-      <button class="btn sm" id="cd-suggest">✨ הצעת תשובה</button>
-      <button class="btn primary sm" id="cd-rsend" ${l.email ? '' : 'disabled'}>שליחת תשובה ל-<span dir="ltr">${esc(l.email || '')}</span></button>
+      <button class="btn sm${fresh ? ' hidden' : ''}" id="cd-suggest">✨ הצעת תשובה</button>
+      <button class="btn primary sm" id="cd-rsend" ${l.email ? '' : 'disabled'}>${fresh ? 'שליחת מייל ל-' : 'שליחת תשובה ל-'}<span dir="ltr">${esc(l.email || '')}</span></button>
       <span class="muted" id="cd-rhint" style="font-size:12px"></span>
     </div>
     <label style="margin-top:12px">הוספת הערה (שיחה, פגישה, תשובה, כל דבר)
@@ -606,8 +609,8 @@ async function openCard(id) {
   $('#cd-rsend').onclick = async () => {
     const subject = $('#cd-rsub').value.trim(), body = $('#cd-rbody').value.trim();
     if (!subject || !body) { toast('חובה למלא נושא ותוכן', true); return; }
-    if (!confirm(`לשלוח את התשובה ל-${l.email}?`)) return;
-    try { await api(`/leads/${id}/reply`, { method: 'POST', body: { subject, body } }); toast('התשובה נשלחה'); await load(); openCard(id); } catch (e) { toast(e.message, true); }
+    if (!confirm(`${fresh ? 'לשלוח את המייל' : 'לשלוח את התשובה'} ל-${l.email}?`)) return;
+    try { await api(`/leads/${id}/reply`, { method: 'POST', body: { subject, body } }); toast(fresh ? 'המייל נשלח' : 'התשובה נשלחה'); await load(); openCard(id); } catch (e) { toast(e.message, true); }
   };
   $('#cd-note-add').onclick = async () => {
     const detail = $('#cd-note').value.trim();

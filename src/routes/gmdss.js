@@ -202,13 +202,15 @@ router.post('/leads/:id/reply', wrap(async (req, res) => {
   if (unknown.length) throw bad(`unknown_variables: ${unknown.map((u) => `{{${u}}}`).join(', ')}`);
   if (notConfigured()) return res.status(503).json({ error: 'email_not_configured', message: NOT_CONFIGURED_MSG });
   const sig = (await settings.getAll()).signatureHtml || '';
-  const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(text)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}</div>`;
-  const plain = `${renderPlain(text)}${sig ? `\n\n${htmlToText(sig)}` : ''}`;
-  await getProvider().send({ to: parseEmails(lead.email), subject, html, text: plain, idempotencyKey: `gmdss-reply:${lead.id}:${Date.now()}` });
-  // A lead never emailed before gets its first email from the card: mark it sent, not "answered".
+  // A lead never emailed before gets its first email from the card: cold outreach, so it carries the
+  // unsubscribe line like a mass send, and its provider id is kept so opens and clicks are tracked.
   const first = lead.emailStatus !== 'sent';
+  const foot = first ? '<p style="font-size:12px;color:#888;margin-top:24px">Not interested? Reply "unsubscribe" and we will not contact you again.</p>' : '';
+  const html = `<div dir="ltr" style="text-align:left;font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${renderRich(text)}${sig ? `<div style="margin-top:20px">${sig}</div>` : ''}${foot}</div>`;
+  const plain = `${renderPlain(text)}${sig ? `\n\n${htmlToText(sig)}` : ''}${first ? '\n\n--\nNot interested? Reply "unsubscribe".' : ''}`;
+  const sent = await getProvider().send({ to: parseEmails(lead.email), subject, html, text: plain, idempotencyKey: `gmdss-reply:${lead.id}:${Date.now()}` });
   await logActivity(prisma, lead.id, first ? 'first_sent' : 'reply_sent', `${subject}\n${text}`);
-  await prisma.gmdssLead.update({ where: { id: lead.id }, data: { followUpAt: new Date(Date.now() + FUP_DAYS * 86400000), ...(first ? { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null } : {}) } });
+  await prisma.gmdssLead.update({ where: { id: lead.id }, data: { followUpAt: new Date(Date.now() + FUP_DAYS * 86400000), ...(first ? { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null, ...(sent && sent.providerId ? { providerId: sent.providerId } : {}) } : {}) } });
   res.json({ sentTo: lead.email });
 }));
 
