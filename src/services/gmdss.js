@@ -75,7 +75,8 @@ function valuesFor(lead) {
 // becomes "Dear <name>,". Templates stay generic; leads without a name keep the generic greeting.
 const SALUTATION = /^(\s*(?:\*\*)?)(?:Dear [^\n]*|Hi|Hello),[ \t]*(?=\n|$)/;
 function personalize(text, lead) {
-  const name = String(lead.contactName ?? '').trim();
+  // "Jan Erik Duff (Global Business Development Manager)" -> "Jan Erik Duff": the role note is for the CRM, not the greeting.
+  const name = String(lead.contactName ?? '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
   return name ? text.replace(SALUTATION, (_m, pre) => `${pre}Dear ${name},`) : text;
 }
 
