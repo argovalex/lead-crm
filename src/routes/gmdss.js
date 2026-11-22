@@ -6,6 +6,7 @@ const { getProvider } = require('../services/provider');
 const { renderRich, renderPlain, htmlToText } = require('../services/render');
 const { suggestReply } = require('../services/suggest');
 const reminders = require('../services/gmdssReminders');
+const { extractLead } = require('../services/gmdssExtract');
 const { VARIABLES, merge, parseCsv, importRows, logActivity, syncReplies, closeEverywhere } = require('../services/gmdss');
 
 const router = express.Router();
@@ -48,6 +49,47 @@ router.get('/leads', wrap(async (_req, res) => {
   const man = await prisma.gmdssActivity.groupBy({ by: ['leadId'], where: { type: 'reminder', detail: { startsWith: '[ידני]' } }, _max: { createdAt: true } });
   const manual = new Map(man.map((o) => [o.leadId, o._max.createdAt]));
   res.json(rows.map((l) => ({ ...l, answeredAt: answered.get(l.id) || null, manualReminderAt: manual.get(l.id) || null })));
+}));
+
+// Manual lead from a link: returns a draft for review (nothing is saved here).
+const hostOf = (w) => { try { return new URL(/^https?:\/\//i.test(w) ? w : `https://${w}`).host.replace(/^www\./, '').toLowerCase(); } catch { return ''; } };
+async function findDuplicate(email, website) {
+  if (email) {
+    const first = String(email).split(/[,;\s]+/)[0];
+    const hit = await prisma.gmdssLead.findFirst({ where: { email: { contains: first, mode: 'insensitive' } }, select: { id: true, organization: true } });
+    if (hit) return hit;
+  }
+  const host = website && hostOf(website);
+  if (host) {
+    const hit = await prisma.gmdssLead.findFirst({ where: { website: { contains: host, mode: 'insensitive' } }, select: { id: true, organization: true } });
+    if (hit) return hit;
+  }
+  return null;
+}
+router.post('/leads/extract', wrap(async (req, res) => {
+  const segs = await prisma.gmdssLead.findMany({ where: { segment: { not: null } }, distinct: ['segment'], select: { segment: true } });
+  const out = await extractLead(req.body && req.body.url, { segments: segs.map((s) => s.segment) });
+  res.json({ ...out, duplicate: await findDuplicate(out.draft.email, out.draft.website) });
+}));
+
+// Create one lead by hand (after reviewing the extracted draft).
+router.post('/leads', wrap(async (req, res) => {
+  const b = req.body || {};
+  const data = {};
+  for (const k of EDITABLE) { const v = String(b[k] ?? '').trim(); if (v) data[k] = v; }
+  if (!data.organization) throw bad('organization_required');
+  if (data.email) { data.email = normEmails(data.email); if (!validEmails(data.email)) throw bad('invalid_email'); }
+  if (data.priority && !['A', 'B', 'C'].includes(data.priority)) throw bad('priority_must_be_A_B_or_C');
+  const notes = String(b.notes || '').trim();
+  if (notes) data.notes = notes;
+  if (!b.force) {
+    const dup = await findDuplicate(data.email, data.website);
+    if (dup) return res.status(409).json({ error: 'duplicate_lead', duplicate: dup });
+  }
+  const lead = await prisma.gmdssLead.create({ data });
+  const src = String(b.sourceUrl || '').trim();
+  await logActivity(prisma, lead.id, 'created', `Added manually${src ? ` from ${src.slice(0, 300)}` : ''}`);
+  res.status(201).json(lead);
 }));
 
 // Edit a lead. Changing the email address resets the send state so the corrected address can be mailed again.

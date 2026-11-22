@@ -379,11 +379,66 @@ $('#imp-file').onchange = async (e) => {
   } catch (err) { toast(err.message, true); }
   e.target.value = '';
 };
+// ---------- Manual lead from a link ----------
+const ADD_FIELDS = [['organization', 'ארגון *'], ['contactName', 'איש קשר'], ['email', 'אימייל'], ['phone', 'טלפון'], ['website', 'אתר'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמה'], ['priority', 'עדיפות'], ['whyTheydBuy', 'למה יקנו']];
+function openAdd(prefill = {}, meta = {}) {
+  const inp = ([k, h]) => {
+    const v = esc(prefill[k] || '');
+    if (k === 'productFit') return `<label>${h}<select id="ad-${k}"><option value=""></option>${['Course', 'Simulator', 'Both'].map((o) => `<option value="${o}"${prefill[k] === o ? ' selected' : ''}>${FIT[o]}</option>`).join('')}</select></label>`;
+    if (k === 'priority') return `<label>${h}<select id="ad-${k}"><option value=""></option>${['A', 'B', 'C'].map((o) => `<option${prefill[k] === o ? ' selected' : ''}>${o}</option>`).join('')}</select></label>`;
+    if (k === 'whyTheydBuy') return `<label style="grid-column:1/-1">${h}<textarea id="ad-${k}" rows="2" dir="ltr" style="width:100%">${v}</textarea></label>`;
+    return `<label>${h}<input id="ad-${k}" value="${v}" dir="ltr" style="width:100%"${k === 'segment' ? ' list="ad-segs"' : ''}></label>`;
+  };
+  const segs = [...new Set(leads.map((l) => l.segment).filter(Boolean))].sort();
+  const others = (meta.emails || []).filter((e) => e.toLowerCase() !== String(prefill.email || '').toLowerCase());
+  dlgOpen(`<h3 style="margin-top:0">＋ ליד מקישור</h3>
+    <div style="display:flex;gap:6px"><input id="ad-url" type="url" dir="ltr" placeholder="https://..." value="${esc(meta.url || '')}" style="flex:1"><button class="btn primary" id="ad-go">גזור ליד</button></div>
+    <div id="ad-msg" class="muted" style="margin:6px 0;min-height:18px">${meta.msg || 'הדבק קישור לאתר, דף קשר או פרופיל. המערכת ממלאת את השדות ואתה מאשר לפני שמירה.'}</div>
+    ${meta.duplicate ? `<div class="warn" style="margin-bottom:6px">כבר קיים ליד דומה: <a href="#" data-card="${meta.duplicate.id}">${esc(meta.duplicate.organization)}</a></div>` : ''}
+    <datalist id="ad-segs">${segs.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 12px">${ADD_FIELDS.map(inp).join('')}</div>
+    ${others.length ? `<div class="muted" style="font-size:12px;margin-top:6px">כתובות נוספות בדף: ${others.map((e) => `<a href="#" class="ad-em" dir="ltr">${esc(e)}</a>`).join(' · ')}</div>` : ''}
+    <label>הערה<textarea id="ad-notes" rows="2" style="width:100%"></textarea></label>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn ghost" id="ad-cancel">ביטול</button><button class="btn primary" id="ad-save">שמירת ליד</button></div>`);
+  const read = () => Object.fromEntries(ADD_FIELDS.map(([k]) => [k, $(`#ad-${k}`).value]));
+  $('#ad-cancel').onclick = dlgClose;
+  $('#dlg-box').querySelectorAll('.ad-em').forEach((a) => { a.onclick = (e) => { e.preventDefault(); $('#ad-email').value = a.textContent; }; });
+  const dupLink = $('#dlg-box').querySelector('[data-card]');
+  if (dupLink) dupLink.onclick = (e) => { e.preventDefault(); openCard(+dupLink.dataset.card); };
+  $('#ad-url').onkeydown = (e) => { if (e.key === 'Enter') $('#ad-go').click(); };
+  $('#ad-go').onclick = async () => {
+    const url = $('#ad-url').value.trim();
+    if (!url) return;
+    $('#ad-go').disabled = true; $('#ad-msg').textContent = 'קורא את הדף...';
+    try {
+      const r = await api('/leads/extract', { method: 'POST', body: { url } });
+      openAdd(r.draft, {
+        url: r.url, emails: r.emails, duplicate: r.duplicate,
+        msg: r.source === 'ai' ? 'השדות מולאו אוטומטית. בדוק ותקן לפני שמירה.' : `השדות מולאו חלקית (בלי AI${r.error ? `: ${r.error}` : ''}). השלם ידנית.`,
+      });
+    } catch (e) { $('#ad-go').disabled = false; $('#ad-msg').textContent = `לא הצלחתי לקרוא את הדף (${e.message}). אפשר למלא ידנית.`; }
+  };
+  const save = async (force) => {
+    const body = { ...read(), notes: $('#ad-notes').value, sourceUrl: $('#ad-url').value.trim(), force };
+    if (!body.organization.trim()) { toast('חסר שם ארגון', true); return; }
+    try {
+      const lead = await api('/leads', { method: 'POST', body });
+      toast('הליד נוסף'); await load(); openCard(lead.id);
+    } catch (e) {
+      if (e.data && e.data.error === 'duplicate_lead' && !force) {
+        if (confirm(`כבר קיים ליד: ${e.data.duplicate.organization}. להוסיף בכל זאת?`)) save(true);
+      } else toast(e.message, true);
+    }
+  };
+  $('#ad-save').onclick = () => save(false);
+  if (!meta.url) $('#ad-url').focus();
+}
+$('#add').onclick = () => openAdd();
 // ---------- Customer card ----------
 const ACT = {
   sent: ['✉', 'מייל נשלח'], delivered: ['✓', 'נמסר'], opened: ['👁', 'נפתח'], clicked: ['↗', 'הקלקה על קישור'],
   bounced: ['⚠', 'חזר'], failed: ['⚠', 'השליחה נכשלה'], replied: ['↩', 'השיב'], template: ['▤', 'תבנית'],
-  edited: ['✎', 'הליד נערך'], email_changed: ['✎', 'המייל שונה'], follow_up: ['⏰', 'מעקב'], note: ['📝', 'הערה'], reply_sent: ['↪', 'תשובה נשלחה'], reminder: ['🔔', 'תזכורת נשלחה'], code_sent: ['🔑', 'קוד גישה נשלח'], closed: ['⛔', 'הליד נסגר'], reopened: ['↺', 'הליד נפתח מחדש'],
+  edited: ['✎', 'הליד נערך'], email_changed: ['✎', 'המייל שונה'], follow_up: ['⏰', 'מעקב'], note: ['📝', 'הערה'], reply_sent: ['↪', 'תשובה נשלחה'], reminder: ['🔔', 'תזכורת נשלחה'], code_sent: ['🔑', 'קוד גישה נשלח'], closed: ['⛔', 'הליד נסגר'], reopened: ['↺', 'הליד נפתח מחדש'], created: ['＋', 'נוסף ידנית'],
 };
 async function openCard(id) {
   const l = leads.find((x) => x.id === id);
