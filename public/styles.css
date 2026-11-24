@@ -68,7 +68,7 @@ main{padding:16px 20px 40px}
 .drawer section{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}
 .drawer h4{margin:0 0 10px;font-size:13px;color:var(--muted)}
 .timeline{list-style:none;padding:0;margin:0}
-.timeline li{display:grid;grid-template-columns:20px 1fr;gap:8px;padding:6px 0;font-size:13px}
+.timeline li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;padding:6px 0;font-size:13px}
 .timeline .ic{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:#eef0ec}
 .timeline time{display:block;color:var(--muted);font-size:11px}
 
@@ -124,7 +124,7 @@ dialog::backdrop{background:rgba(0,0,0,.3)}
 .fu-item{background:#fff;border:1px solid #dde3e0;border-radius:10px;padding:12px;margin-bottom:10px;cursor:pointer}
 .fu-item.over{border-color:#c0392b}
 .fu-item .snip{margin-top:6px;font-size:13px;color:#445;white-space:pre-wrap;max-height:4.5em;overflow:hidden}
-.timeline .body{unicode-bidi:plaintext;text-align:start;margin-top:4px;font-size:13px;color:#445;white-space:pre-wrap;border-inline-start:3px solid #dde3e0;padding-inline-start:8px}
+.timeline .body{overflow-wrap:anywhere;max-width:100%;unicode-bidi:plaintext;text-align:start;margin-top:4px;font-size:13px;color:#445;white-space:pre-wrap;border-inline-start:3px solid #dde3e0;padding-inline-start:8px}
 .timeline .body.in{border-color:#1f6f54}
 .logrow{display:flex;gap:6px;flex-wrap:wrap}
 .logrow select,.logrow input{flex:1;min-width:120px}
@@ -196,3 +196,7 @@ details.dd>summary{cursor:pointer;font-weight:600}
 /* Today screen: tapping the lead row opens its card. */
 .fu-item { cursor: pointer; }
 .fu-item .acts { cursor: default; }
+
+.drawer-inner{min-width:0;overflow-wrap:anywhere}
+.timeline li>div{min-width:0;overflow-wrap:anywhere}
+#modal-form textarea,#modal-form input{max-width:100%;box-sizing:border-box}
