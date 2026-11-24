@@ -513,7 +513,7 @@ async function openCard(id) {
   const row = ([h, v]) => (v ? `<div style="display:flex;gap:8px"><span class="muted" style="min-width:110px">${h}</span><span dir="ltr">${esc(v)}</span></div>` : '');
   dlgOpen(`<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
       <h3 style="margin:0">${esc(l.organization)} ${l.priority ? `<span class="pb ${esc(l.priority)}">${esc(l.priority)}</span>` : ''}</h3>
-      <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-close-lead">${l.closedAt ? '↺ פתיחה מחדש' : '⛔ סגירה ועצירה'}</button> <button class="btn sm" id="cd-del" style="color:#b91c1c">🗑 מחיקה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
+      <div><button class="btn sm" id="cd-edit">✎ עריכה</button> <button class="btn sm" id="cd-close-lead">${l.closedAt ? '↺ פתיחה מחדש' : '⛔ סגירה ועצירה'}</button> <button class="btn sm" id="cd-del" style="color:var(--danger-text)">🗑 מחיקה</button> <button class="btn sm" id="cd-close" aria-label="סגירה">✕</button></div></div>
     <div style="margin:8px 0;display:grid;gap:3px;font-size:13px">
       ${[['איש קשר', l.contactName], ['מדינה', l.country], ['סוג', l.segment], ['התאמת מוצר', FIT[l.productFit] || l.productFit], ['אתר', l.website], ['מייל', l.email], ['טלפון', l.phone],
         ['למה יקנו', l.whyTheydBuy], ['תבנית', l.template && l.template.name], ['סיבת סגירה', l.closedAt && l.closedReason], ['סטטוס מייל', STATUS[l.emailStatus] || l.emailStatus],
@@ -546,7 +546,7 @@ async function openCard(id) {
     <div id="cd-acts" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px">
       ${acts.map((a) => { const [ico, lab] = ACT[a.type] || ['•', a.type];
         return `<div style="padding:6px 10px;border-bottom:1px solid var(--line);font-size:13px"><span class="muted" style="font-size:12px">${esc(fmt(a.createdAt))}</span>
-          <b>${ico} ${lab}</b>${a.detail ? `<div dir="ltr" style="white-space:pre-wrap;color:#444">${esc(a.detail)}</div>` : ''}</div>`; }).join('')
+          <b>${ico} ${lab}</b>${a.detail ? `<div dir="ltr" style="white-space:pre-wrap;color:var(--ink)">${esc(a.detail)}</div>` : ''}</div>`; }).join('')
         || '<div class="muted" style="padding:10px">אין עדיין פעילות</div>'}
     </div>`);
   if (draft) { $('#cd-rsub').value = draft.subject; $('#cd-rbody').value = draft.body; }
@@ -725,7 +725,7 @@ function editLead(id) {
       ? `<textarea data-f="${k}" rows="3" dir="ltr" style="width:100%">${esc(l[k])}</textarea>`
       : `<input data-f="${k}" value="${esc(l[k])}" dir="ltr" style="width:100%">`}</label>`).join('')}
     <p class="muted" style="font-size:12px;margin:8px 0 0">שינוי כתובת המייל מאפס את סטטוס השליחה של הליד, כך שאפשר לשלוח אליו שוב.</p>
-    <div class="toolbar" style="margin-top:12px"><button class="btn primary" id="le-save">שמירה</button><button class="btn" id="le-cancel">ביטול</button><button class="btn" id="le-del" style="color:#b91c1c;margin-inline-start:auto">🗑 מחיקת ליד</button></div>`);
+    <div class="toolbar" style="margin-top:12px"><button class="btn primary" id="le-save">שמירה</button><button class="btn" id="le-cancel">ביטול</button><button class="btn" id="le-del" style="color:var(--danger-text);margin-inline-start:auto">🗑 מחיקת ליד</button></div>`);
   $('#le-cancel').onclick = dlgClose;
   $('#le-del').onclick = () => deleteLead(id);
   $('#le-save').onclick = async () => {

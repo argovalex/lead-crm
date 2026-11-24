@@ -22,29 +22,29 @@ body.embed main{padding:8px 10px 12px;min-height:100vh;height:100vh}
 .kpis2 .k.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 table.g{border-collapse:collapse;width:100%;font-size:13px}
 table.g th,table.g td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
-table.g th{position:sticky;top:0;background:#eef0eb;cursor:pointer;white-space:nowrap;user-select:none;z-index:1}
-table.g tbody tr:hover{background:#f6f8f5}
-table.g tr.p-A td:first-child{box-shadow:inset 5px 0 0 #b23a3a}
-table.g tr.p-B td:first-child{box-shadow:inset 5px 0 0 #c28a1d}
-table.g tr.p-C td:first-child{box-shadow:inset 5px 0 0 #aab3ad}
-table.g tr.p-A{background:#fdf3f3}table.g tr.p-B{background:#fdf8ec}
+table.g th{position:sticky;top:0;background:var(--bg);cursor:pointer;white-space:nowrap;user-select:none;z-index:1}
+table.g tbody tr:hover{background:var(--hover)}
+table.g tr.p-A td:first-child{box-shadow:inset 5px 0 0 var(--navy)}
+table.g tr.p-B td:first-child{box-shadow:inset 5px 0 0 #D69E2E}
+table.g tr.p-C td:first-child{box-shadow:inset 5px 0 0 #94A3B8}
+table.g tr.p-A{background:var(--hover)}table.g tr.p-B{background:var(--warn-bg)}
 .org{display:flex;align-items:center;gap:6px;font-weight:600}
 .org .ed{padding:0 6px;line-height:20px;flex:none}
-.why{color:#6b756e;font-size:12px;margin-top:2px;max-width:260px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.why{color:var(--muted);font-size:12px;margin-top:2px;max-width:260px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ct{display:flex;flex-direction:column;gap:1px;direction:ltr;text-align:left;font-size:12px}
 .stlink{text-decoration:none;color:inherit;cursor:pointer;display:inline-flex;flex-wrap:wrap;gap:3px}.stlink:hover .st{filter:brightness(.93)}
-.st{font-size:12px;border-radius:6px;padding:1px 7px;background:#e8eae5;white-space:nowrap}
-.st.sent{background:#d6efe1;color:#1f6f54}.st.failed,.st.bounced{background:#f5d9d9;color:var(--danger)}.st.queued{background:#f6e8cf;color:var(--warn)}
+.st{font-size:12px;border-radius:6px;padding:1px 7px;background:var(--bg);white-space:nowrap}
+.st.sent{background:var(--ok-bg);color:var(--ok-text)}.st.failed,.st.bounced{background:var(--danger-bg);color:var(--danger-text)}.st.queued{background:var(--warn-bg);color:var(--warn-text)}
 .egs{display:inline-flex;gap:3px;white-space:nowrap}
-.eg{display:inline-block;border-radius:10px;padding:1px 7px;background:#eceee9;color:#a3aaa5;font-size:11px}
-.eg.on{background:#1f6f54;color:#fff}
-.muted-cell{color:#b3b9b4}
+.eg{display:inline-block;border-radius:10px;padding:1px 7px;background:var(--bg);color:var(--muted);font-size:11px}
+.eg.on{background:var(--ok-text);color:#fff}
+.muted-cell{color:#94A3B8}
 .vars{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .vars button{font-size:12px}
 .dlg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;z-index:20}
 .dlg .box{background:#fff;border-radius:12px;padding:20px;max-width:780px;width:94%;max-height:92vh;overflow:auto}
 .dlg label{display:block;margin-top:8px}
-.prev{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fafaf8;margin-top:6px}
+.prev{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--hover);margin-top:6px}
 .warn{color:var(--warn)}
 </style>
 </head>
@@ -87,7 +87,7 @@ table.g tr.p-A{background:#fdf3f3}table.g tr.p-B{background:#fdf8ec}
     <button class="btn primary" id="send">✉ שליחת מייל</button>
     <button class="btn" id="attach">שיוך תבנית</button>
     <button class="btn" id="bulk-close">⛔ סגירה ועצירה</button>
-    <button class="btn" id="bulk-del" style="color:#b91c1c">🗑 מחיקה</button>
+    <button class="btn" id="bulk-del" style="color:var(--danger-text)">🗑 מחיקה</button>
     <span class="spacer"></span>
     <button class="btn ghost" id="sel-none">נקה בחירה</button>
   </div>

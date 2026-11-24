@@ -102,6 +102,7 @@ router.patch('/leads/:id', wrap(async (req, res) => {
   if ('tags' in req.body) data.tags = leads.normTags(req.body.tags);
   const lead = await prisma.lead.update({ where: { id: leadId }, data });
   if (req.body.stage) await leads.changeStage(leadId, req.body.stage);
+  if ('nextAction' in req.body || 'nextFollowUpAt' in req.body) await require('../services/tasks').reconcileFromLead(leadId);
   res.json(await prisma.lead.findUnique({ where: { id: lead.id } }));
 }));
 
@@ -580,6 +581,12 @@ router.get('/messages', wrap(async (req, res) => {
     where, orderBy: { createdAt: 'desc' }, take: 200,
     select: { id: true, subject: true, status: true, createdAt: true, sentAt: true, openedAt: true, clickedAt: true, lastError: true, lead: { select: { id: true, name: true, email: true } } },
   }));
+}));
+
+// ---------- Tasks & follow-ups ----------
+router.use('/tasks', require('./tasks'));
+router.get('/leads/:id/tasks', wrap(async (req, res) => {
+  res.json(await require('../services/tasks').listTasks({ leadId: id(req.params.id), view: 'all' }));
 }));
 
 module.exports = router;

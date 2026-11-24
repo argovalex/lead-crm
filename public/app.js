@@ -8,6 +8,7 @@ const ACT = {
   EMAIL_BOUNCED: ['✕', 'חזר (bounce)'], EMAIL_COMPLAINED: ['⚠', 'סומן כספאם'], EMAIL_FAILED: ['✕', 'שליחה נכשלה'],
   MANUAL_EMAIL_OUT: ['✉', 'מייל שנשלח (ידני)'], REPLY_IN: ['↩', 'תשובה התקבלה'], SMS_OUT: ['💬', 'SMS נשלח'], SMS_IN: ['💬', 'SMS התקבל'],
   CALL: ['☎', 'שיחה'], MEETING: ['🤝', 'פגישה'],
+  TASK_CREATED: ['☑', 'משימה נוצרה'], TASK_COMPLETED: ['✔', 'משימה הושלמה'], FOLLOWUP_DATE_CHANGED: ['📅', 'שינוי תאריך מעקב'],
   UNSUBSCRIBED: ['⊘', 'הסיר עצמו מהתפוצה'], SEQUENCE_ENROLLED: ['▶', 'נוסף לרצף'], STALE_FLAGGED: ['⏸', 'סומן כרדום'],
 };
 const KINDS = { EMAIL_OUT: 'מייל שנשלחתי (ידני)', EMAIL_IN: 'תשובה במייל שהתקבלה', SMS_OUT: 'SMS שנשלח', SMS_IN: 'SMS שהתקבל', CALL: 'שיחה', MEETING: 'פגישה' };
@@ -201,13 +202,15 @@ const isCallAction = (a) => /טלפון|שיחה/.test(a || '');
 
 const replySubjects = {};
 async function openLead(id, replace) {
-  const l = await api(`/leads/${id}`);
+  const [l, taskList] = await Promise.all([api(`/leads/${id}`), api(`/leads/${id}/tasks`).catch(() => [])]);
   drawerLead = id;
   setHash(`#/${view}/lead/${id}`, replace);
   const actText = (a) => {
     const d = a.data || {};
     if (a.type === 'STAGE_CHANGED') return `${STAGE_LABELS[d.from]} ← ${STAGE_LABELS[d.to]} <span class="muted">(${REASONS[d.reason] || esc(d.reason)})</span>`;
     if (a.type === 'NOTE') return esc(d.text);
+    if (a.type === 'TASK_CREATED' || a.type === 'TASK_COMPLETED') return `<span dir="auto">${esc(d.title)}</span>`;
+    if (a.type === 'FOLLOWUP_DATE_CHANGED') return `<span dir="auto">${esc(d.title)}</span> <span class="muted">(${esc(d.from)} ← ${esc(d.to)})</span>`;
     if (d.manual) return `${d.subject ? `<span dir="auto" style="unicode-bidi:plaintext">"${esc(d.subject)}"</span>` : ''}${d.body ? `<div dir="auto" class="body ${['REPLY_IN', 'SMS_IN'].includes(a.type) ? 'in' : ''}">${esc(d.body)}</div>` : ''}`;
     if (d.subject) return `"${esc(d.subject)}"`;
     if (d.name) return esc(d.name);
@@ -217,6 +220,7 @@ async function openLead(id, replace) {
   };
   const enr = l.enrollments.map((e) => `<div>${esc(e.sequence.name)} — ${{ ACTIVE: 'פעיל', COMPLETED: 'הושלם', STOPPED: 'נעצר' }[e.status]}${e.stopReason ? ` (${esc(e.stopReason)})` : ''}${e.status === 'ACTIVE' && e.nextRunAt ? ` · הבא: ${fmt(e.nextRunAt)}` : ''}</div>`).join('') || '<div class="muted">לא ברצף</div>';
   const emailable = !l.unsubscribed && !l.bounced;
+  const nextTask = taskList.find((t) => t.isNextAction && ['OPEN', 'IN_PROGRESS', 'WAITING'].includes(t.status));
 
   $('#drawer-body').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
@@ -230,21 +234,8 @@ async function openLead(id, replace) {
       <button class="btn" id="d-unenroll">עצור רצפים</button>
       <button class="btn danger" id="d-del">מחיקה</button>
     </div>
-    <section class="nextstep"><h4>הצעד הבא</h4>
-      <div class="ns-state ${fuState(l) === 'over' ? 'over' : ''}">${l.nextFollowUpAt ? `${NEXT_ICON(l.nextAction)} <b>${esc(l.nextAction || 'מעקב')}</b> · ${dateHe(l.nextFollowUpAt)}${fuState(l) === 'over' ? ' · באיחור' : ''}<span class="muted"> · מופיע בטאב "היום"</span>` : '<span class="muted">אין צעד מתוכנן</span>'}</div>
-      <form id="d-next">
-        <div class="logrow">
-          <select name="stage" aria-label="שלב">${STAGES.map((s) => `<option value="${s}" ${s === l.stage ? 'selected' : ''}>${STAGE_LABELS[s]}</option>`).join('')}</select>
-          <input name="nextAction" list="ns-opts" value="${esc(l.nextAction)}" placeholder="פעולה: שיחת טלפון, פגישה…" autocomplete="off">
-          <datalist id="ns-opts">${NEXT_ACTIONS.map((a) => `<option value="${a}">`).join('')}</datalist>
-        </div>
-        <div class="logrow">
-          <input name="nextFollowUpAt" type="date" value="${dayStr(l.nextFollowUpAt)}" aria-label="תאריך">
-          <span class="chips"><button type="button" class="btn sm" data-d="0">היום</button><button type="button" class="btn sm" data-d="1">מחר</button><button type="button" class="btn sm" data-d="3">+3</button><button type="button" class="btn sm" data-d="7">שבוע</button></span>
-        </div>
-        <div class="logrow"><span class="muted">עדכון שלב, פעולה ותאריך מופיע מיד ב"היום" ובכרטיס.</span><button class="btn primary">שמירה</button></div>
-      </form>
-    </section>
+    ${nextActionHtml(l, nextTask, STAGES, STAGE_LABELS)}
+    ${leadTasksHtml(taskList)}
     <section><h4>ציר זמן</h4><ul class="timeline">${l.activities.map((a) => `
       <li><span class="ic">${(ACT[a.type] || ['•'])[0]}</span><div><b>${(ACT[a.type] || [, a.type])[1]}</b> <time>${fmt(a.createdAt)}</time>${actText(a)}</div></li>`).join('')}</ul></section>
     <section>
@@ -289,21 +280,7 @@ async function openLead(id, replace) {
   $('#d-close').onclick = closeDrawer;
   const refresh = () => { openLead(id); refreshView(); };
 
-  $('#d-next').onclick = (e) => {
-    const b = e.target.closest('[data-d]');
-    if (b) $('#d-next [name="nextFollowUpAt"]').value = dayStr(new Date(Date.now() + Number(b.dataset.d) * 86400000));
-  };
-  $('#d-next').onsubmit = async (e) => {
-    e.preventDefault();
-    const fd = Object.fromEntries(new FormData(e.target));
-    if (fd.nextAction && !fd.nextFollowUpAt) fd.nextFollowUpAt = dayStr(new Date());
-    try {
-      await api(`/leads/${id}`, { method: 'PATCH', body: fd });
-      toast('נשמר');
-      refresh();
-      if (view !== 'followups') renderFollowups().catch(() => {});
-    } catch (err) { fail(err); }
-  };
+  bindLeadTasks(id, taskList, () => { refresh(); if (view !== 'followups') renderFollowups().catch(() => {}); });
   $('#d-form').onsubmit = async (e) => {
     e.preventDefault();
     try { await api(`/leads/${id}`, { method: 'PATCH', body: Object.fromEntries(new FormData(e.target)) }); toast('נשמר'); refresh(); } catch (err) { fail(err); }
@@ -344,11 +321,13 @@ function composeModal(lead, prefill = {}) {
     ${INSERT_BAR('')}
     <p class="muted">קישור: הדבק כתובת, או השתמש בכפתורים. סרטון YouTube יוצג כתמונה שנפתחת בלחיצה. החתימה נוספת אוטומטית.</p>
     <div class="logrow"><button type="button" class="btn" data-preview="">👁 תצוגה מקדימה</button><button type="button" class="btn" data-test="">✉ שלח לי בדיקה</button></div>`, async (fd) => {
-    if (lead) await api(`/leads/${lead.id}/email`, { method: 'POST', body: fd });
-    else await api('/compose', { method: 'POST', body: fd });
+    const sent = lead ? await api(`/leads/${lead.id}/email`, { method: 'POST', body: fd }) : await api('/compose', { method: 'POST', body: fd });
     toast('המייל בתור ויישלח בדקה הקרובה');
     refreshView();
     if (lead) openLead(lead.id);
+    // Offer (never auto-create) a follow-up task for this email; the shared dialog is reused, so open it after this one closes.
+    const offerLead = lead ? lead.id : sent.leadId;
+    if (offerLead) setTimeout(() => offerFollowupTask(offerLead, sent.queued, lead ? lead.name : fd.company || fd.name), 250);
   }, 'שליחה');
   if (prefill.subject) form.querySelector('[name="subject"]').value = prefill.subject;
   if (!lead) {
@@ -459,7 +438,7 @@ function todayItem(l, group) {
 }
 
 async function renderFollowups() {
-  const [rows, outbox] = await Promise.all([api('/followups'), api('/outbox').catch(() => [])]);
+  const [rows, outbox, tsum] = await Promise.all([api('/followups'), api('/outbox').catch(() => []), renderTasksBoard().catch(() => null)]);
   const drafts = outbox.filter((m) => m.status === 'DRAFT').length;
   const eod = endOfToday();
   const week = new Date(eod.getTime() + 7 * 86400000);
@@ -471,7 +450,7 @@ async function renderFollowups() {
   const overdueN = [...reply, ...dueToday].filter((l) => new Date(l.nextFollowUpAt) < new Date(new Date().setHours(0, 0, 0, 0))).length;
 
   const b = $('#fu-count');
-  const urgent = reply.length + dueToday.length + drafts;
+  const urgent = reply.length + dueToday.length + drafts + ((tsum && tsum.extraDue) || 0); // extra tasks due or overdue (Next Actions are already in the lead list)
   b.textContent = urgent;
   b.classList.toggle('hidden', !urgent);
 

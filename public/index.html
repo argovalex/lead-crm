@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CRM</title>
 <link rel="stylesheet" href="/styles.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M8 1l7 7-7 7-7-7z%22 fill=%22%231f6f54%22/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M8 1l7 7-7 7-7-7z%22 fill=%22%2317365D%22/%3E%3C/svg%3E">
 </head>
 <body>
 <header class="top">
@@ -46,6 +46,7 @@
       <button class="btn" data-action="paste-reply">↩ תשובה שהתקבלה</button>
       <button class="btn" data-action="log-sent">✉ מייל שנשלח</button>
     </div>
+    <div id="tasks-board"></div>
     <div id="today"></div>
   </section>
 
@@ -183,10 +184,11 @@
 </aside>
 <div id="scrim" class="scrim hidden"></div>
 
-<dialog id="preview-dlg" class="wide"><div style="padding:20px"><h3 style="margin:0 0 6px">תצוגה מקדימה</h3><div id="pv-meta" class="muted"></div><iframe id="pv-frame" style="width:100%;height:60vh;border:1px solid #dde3e0;border-radius:8px;background:#fff;margin-top:8px"></iframe><div style="text-align:end;margin-top:10px"><button class="btn primary" id="pv-close">סגירה</button></div></div></dialog>
+<dialog id="preview-dlg" class="wide"><div style="padding:20px"><h3 style="margin:0 0 6px">תצוגה מקדימה</h3><div id="pv-meta" class="muted"></div><iframe id="pv-frame" style="width:100%;height:60vh;border:1px solid var(--line);border-radius:8px;background:#fff;margin-top:8px"></iframe><div style="text-align:end;margin-top:10px"><button class="btn primary" id="pv-close">סגירה</button></div></div></dialog>
 <dialog id="modal"><form method="dialog" id="modal-form"></form></dialog>
 <div id="toast" class="toast"></div>
 
+<script src="/tasks.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

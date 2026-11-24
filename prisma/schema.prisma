@@ -59,10 +59,34 @@ model Lead {
   activities     Activity[]
   enrollments    Enrollment[]
   messages       EmailMessage[]
+  tasks          Task[]
 
   @@index([stage])
   @@index([lastActivityAt])
   @@index([nextFollowUpAt])
+}
+
+// Tasks & follow-ups. One row per task; at most one open row per lead has isNextAction = true
+// (partial unique index in the migration). Lead.nextAction / nextFollowUpAt stay as the mirror of that row,
+// so the existing "today" list, import and email logic keep working unchanged.
+model Task {
+  id          Int       @id @default(autoincrement())
+  leadId      Int
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  title       String
+  taskType    String    @default("OTHER")
+  description String?
+  dueDate     DateTime
+  dueTime     String?
+  priority    String    @default("B")
+  status      String    @default("OPEN")
+  isNextAction Boolean  @default(false)
+  dedupeKey   String?   @unique
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([leadId])
+  @@index([status, dueDate])
 }
 
 model Activity {

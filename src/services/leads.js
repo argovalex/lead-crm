@@ -122,6 +122,7 @@ async function logInteraction(leadId, input, db = prisma) {
     upd.nextFollowUpAt = new Date(at.getTime() + Number(input.followUpDays) * DAY);
   }
   await db.lead.update({ where: { id: leadId }, data: upd });
+  await require('./tasks').reconcileFromLead(leadId, db);
   if (spec.dir === 'in') {
     await stopEnrollments(leadId, 'replied', db);
     await advanceStageTo(leadId, 'ENGAGED', 'auto:reply', db, at);

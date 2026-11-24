@@ -180,6 +180,7 @@ async function closeEverywhere(prisma, emails, { closed = true, reason = null } 
     if (closed) {
       if (l.stage !== 'LOST') await prisma.activity.create({ data: { leadId: l.id, type: 'STAGE_CHANGED', data: { from: l.stage, to: 'LOST', reason: reason || 'closed' } } });
       await prisma.lead.update({ where: { id: l.id }, data: { stage: 'LOST', nextAction: null, nextFollowUpAt: null } });
+      await prisma.task.updateMany({ where: { leadId: l.id, status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING'] } }, data: { status: 'CANCELLED' } }); // closed lead: tasks are kept, not deleted
       await prisma.enrollment.updateMany({ where: { leadId: l.id, status: 'ACTIVE' }, data: { status: 'STOPPED', stopReason: 'closed', nextRunAt: null } });
       await prisma.emailMessage.updateMany({ where: { leadId: l.id, status: { in: ['QUEUED', 'DRAFT'] } }, data: { status: 'CANCELLED', lastError: 'closed' } });
     } else if (l.stage === 'LOST') {

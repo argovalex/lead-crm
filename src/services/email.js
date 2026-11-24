@@ -155,6 +155,7 @@ async function dispatch(now = new Date(), db = prisma, provider = getProvider())
       if (!msg.enrollmentId) {
         // A manually written email: the "reply" task is done; schedule the next follow-up.
         await db.lead.update({ where: { id: lead.id }, data: { nextAction: 'מעקב', nextFollowUpAt: new Date(now.getTime() + 5 * DAY) } });
+        await require('./tasks').reconcileFromLead(lead.id, db);
       }
       sent += 1;
     } catch (e) {
