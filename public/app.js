@@ -246,7 +246,7 @@ async function openLead(id, replace) {
       </form>
     </section>
     <section><h4>ציר זמן</h4><ul class="timeline">${l.activities.map((a) => `
-      <li><span class="ic">${(ACT[a.type] || ['•'])[0]}</span><div><b>${(ACT[a.type] || [, a.type])[1]}</b> ${actText(a)}<time>${fmt(a.createdAt)}</time></div></li>`).join('')}</ul></section>
+      <li><span class="ic">${(ACT[a.type] || ['•'])[0]}</span><div><b>${(ACT[a.type] || [, a.type])[1]}</b> <time>${fmt(a.createdAt)}</time>${actText(a)}</div></li>`).join('')}</ul></section>
     <section>
       <h4>תיעוד אינטראקציה</h4>
       <form id="d-log" style="display:flex;flex-direction:column;gap:6px">
