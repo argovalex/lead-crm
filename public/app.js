@@ -199,6 +199,7 @@ const NEXT_ACTIONS = ['שיחת טלפון', 'שליחת מייל', 'פגישה'
 const NEXT_ICON = (a) => (/טלפון|שיחה/.test(a || '') ? '☎' : /פגישה/.test(a || '') ? '🤝' : /מייל|להשיב|הצעה/.test(a || '') ? '✉' : '⏰');
 const isCallAction = (a) => /טלפון|שיחה/.test(a || '');
 
+const replySubjects = {};
 async function openLead(id, replace) {
   const l = await api(`/leads/${id}`);
   drawerLead = id;
@@ -324,7 +325,7 @@ async function openLead(id, replace) {
     if (!e.target.value) return;
     try { await api(`/leads/${id}/enroll`, { method: 'POST', body: { sequenceId: +e.target.value } }); toast('נוסף לרצף'); refresh(); } catch (err) { fail(err); e.target.value = ''; }
   };
-  $('#d-email').onclick = () => composeModal(l);
+  $('#d-email').onclick = () => { const subject = replySubjects[id] || ''; delete replySubjects[id]; composeModal(l, { subject }); };
 }
 
 
@@ -508,9 +509,9 @@ $('#today').addEventListener('click', async (e) => {
     if (btn.dataset.a === 'open') return openLead(leadId);
     if (btn.dataset.a === 'del') return confirmDelete([leadId], btn.dataset.name);
     if (btn.dataset.a === 'reply') {
-      const lead = await api(`/leads/${leadId}`);
       const subj = card.dataset.subject;
-      return composeModal(lead, { subject: subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '' });
+      replySubjects[leadId] = subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '';
+      return openLead(leadId);
     }
     if (btn.dataset.a === 'done') await api(`/leads/${leadId}`, { method: 'PATCH', body: { nextFollowUpAt: null, nextAction: '' } });
     if (btn.dataset.a === 'snooze3' || btn.dataset.a === 'snooze7') {
