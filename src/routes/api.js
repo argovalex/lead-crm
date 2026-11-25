@@ -181,6 +181,22 @@ router.post('/leads/:id/replied', wrap(async (req, res) => {
 router.post('/leads/:id/email', wrap(async (req, res) => {
   const msg = await email.queueSingle(id(req.params.id), req.body.subject, req.body.body);
   await leads.logActivity(msg.leadId, 'EMAIL_QUEUED', { messageId: msg.id, subject: msg.subject });
+  // An access code sent from the mail view is recorded on the matching GMDSS card too (only when it is really in the text).
+  const code = String(req.body.accessCode || '').trim();
+  if (code && String(req.body.body || '').includes(code)) {
+    try {
+      const { parseEmails } = require('../services/emails');
+      const { logActivity } = require('../services/gmdss');
+      const lead = await prisma.lead.findUnique({ where: { id: msg.leadId }, select: { email: true } });
+      const addrs = parseEmails(lead && lead.email);
+      const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true } })).find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
+      if (gl) {
+        const now = new Date();
+        await prisma.gmdssLead.update({ where: { id: gl.id }, data: { accessCode: code, codeSentAt: now, followUpAt: new Date(+now + 3 * 86400000) } });
+        await logActivity(prisma, gl.id, 'code_sent', `Access code ${code} sent`);
+      }
+    } catch (e) { console.error('code record failed', e.message); }
+  }
   res.status(202).json({ queued: msg.id });
 }));
 
@@ -502,7 +518,7 @@ router.get('/leads/:id/thread', wrap(async (req, res) => {
 // Reply tools for the mail view: ready GMDSS templates and a fresh access-code email, both merged with this lead's details.
 router.get('/leads/:id/compose-tools', wrap(async (req, res) => {
   const { merge } = require('../services/gmdss');
-  const { newCode, codeEmail } = require('../services/gmdssReminders');
+  const { codeEmail } = require('../services/gmdssReminders');
   const { parseEmails } = require('../services/emails');
   const lead = await prisma.lead.findUnique({ where: { id: id(req.params.id) } });
   if (!lead) return res.status(404).json({ error: 'not_found' });
@@ -510,8 +526,34 @@ router.get('/leads/:id/compose-tools', wrap(async (req, res) => {
   const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } } })).find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
   const view = gl || { organization: lead.company || lead.name, contactName: lead.name, country: lead.country, segment: lead.segment, website: lead.website, email: lead.email, phone: lead.phone, priority: lead.priority };
   const templates = (await prisma.gmdssTemplate.findMany({ orderBy: { id: 'asc' } })).map((t) => ({ id: t.id, name: t.name, subject: merge(t.subject, view).text, body: merge(t.body, view).text }));
-  const code = (gl && gl.accessCode) || newCode();
-  res.json({ templates, code: { value: code, ...codeEmail({ organization: view.organization }, code, '') } });
+  // Codes are issued in the course admin (records.html), never invented here: the caller passes the issued code.
+  const code = String(req.query.code || '').trim();
+  res.json({ templates, code: code ? { value: code, ...codeEmail({ organization: view.organization }, code, '') } : null });
+}));
+// One click: issue a real access code on the course server (same call as admin.html / records.html), return the ready reply with it.
+router.post('/leads/:id/mint-code', wrap(async (req, res) => {
+  const { codeEmail } = require('../services/gmdssReminders');
+  const { parseEmails } = require('../services/emails');
+  const lead = await prisma.lead.findUnique({ where: { id: id(req.params.id) } });
+  if (!lead) return res.status(404).json({ error: 'not_found' });
+  const token = process.env.COURSE_ADMIN_TOKEN;
+  if (!token) return res.status(501).json({ error: 'course_token_missing' });
+  const to = parseEmails(lead.email)[0];
+  if (!to) return res.status(400).json({ error: 'lead_has_no_email' });
+  const addrs = parseEmails(lead.email);
+  const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, accessCode: true } })).find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
+  let code = !req.body.fresh && gl && gl.accessCode ? gl.accessCode : null, reused = !!code;
+  if (!code) {
+    const base = (process.env.COURSE_API_URL || 'https://api.alargov.com').replace(/\/$/, '');
+    let r;
+    try {
+      r = await fetch(`${base}/api/admin/promo`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin': token }, body: JSON.stringify({ name: lead.name || '', school: lead.company || '', email: to, phone: lead.phone || '' }), signal: AbortSignal.timeout(15000) });
+    } catch (e) { return res.status(502).json({ error: 'course_unreachable' }); }
+    const j = await r.json().catch(() => ({}));
+    code = j && j.ok && j.codes && j.codes[0] && j.codes[0].code;
+    if (!code) return res.status(502).json({ error: 'course_refused', detail: (j && (j.reason || j.error)) || r.status });
+  }
+  res.json({ code, reused, ...codeEmail({ organization: (gl && gl.organization) || lead.company || lead.name }, code, '') });
 }));
 router.post('/leads/:id/suggest-reply', wrap(async (req, res) => {
   const leadId = id(req.params.id);

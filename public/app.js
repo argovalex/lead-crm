@@ -661,6 +661,7 @@ function confirmDelete(ids, label) {
 
 // ---------------- Mail: conversations per lead ----------------
 let mailSel = null;
+let pendingCode = null;
 let mailFilter = 'all';
 const KIND_LABEL = { campaign: 'קמפיין', manual: 'אישי', reply: 'תשובה שהתקבלה', logged: 'נשלח מחוץ למערכת' };
 const MSTATUS = { QUEUED: 'בתור', SENDING: 'נשלח כעת', DRAFT: 'ממתין לאישור' };
@@ -706,7 +707,7 @@ async function renderThread(leadId) {
         <div class="bb" dir="auto">${esc(i.body || '')}</div>
       </div>`).join('') : '<p class="muted pad">עוד לא נשלח או התקבל מייל מהליד הזה.</p>'}</div>
     ${emailable ? `<form class="th-reply" id="th-form">
-      <div class="logrow"><select id="th-tpl" aria-label="תבנית מוכנה"><option value="">＋ תבנית מוכנה…</option></select><button type="button" class="btn sm" id="th-code">🔑 קוד גישה</button></div>
+      <div class="logrow"><select id="th-tpl" aria-label="תבנית מוכנה"><option value="">＋ תבנית מוכנה…</option></select><button type="button" class="btn sm" id="th-code">🔑 שלח קוד</button></div>
       <input name="subject" placeholder="נושא" value="${esc(subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '')}" required>
       <textarea name="body" rows="7" placeholder="${lastIn ? 'כתוב תשובה…' : 'כתוב מייל…'}" required></textarea>
       <div class="logrow"><span class="muted" id="th-hint">החתימה נוספת אוטומטית. המייל יישלח בדקה הקרובה.</span>${lastIn ? '<button type="button" class="btn sm" id="th-suggest">✨ הצעת תשובה</button>' : ''}<button class="btn primary">${lastIn ? 'שלח תשובה' : 'שלח'}</button></div>
@@ -755,7 +756,30 @@ async function renderThread(leadId) {
         $('#th-hint').textContent = 'נטען. בדוק וערוך לפני שליחה.';
       };
       sel.onchange = () => { const t = tools.templates.find((x) => x.id === +sel.value); sel.value = ''; if (t) fill(t.subject, t.body); };
-      $('#th-code').onclick = () => fill(tools.code.subject, tools.code.body);
+      // The code is issued in records.html / admin (real, validated by the course server); here it is only pasted or arrives via the "✉" link there.
+      const useCode = async (c, silent) => {
+        c = String(c || '').trim();
+        if (!c) return;
+        const t = await api(`/leads/${leadId}/compose-tools?code=${encodeURIComponent(c)}`).catch(() => null);
+        if (!t || !t.code) return;
+        const ta = f.querySelector('textarea');
+        if (!silent) fill(t.code.subject, t.code.body); else { f.querySelector('[name=subject]').value = t.code.subject; ta.value = t.code.body; $('#th-hint').textContent = 'קוד הגישה נטען. בדוק וערוך לפני שליחה.'; }
+        if (ta.value === t.code.body) f.dataset.code = c;
+      };
+      $('#th-code').onclick = async () => {
+        const btn = $('#th-code'); btn.disabled = true;
+        try {
+          const m = await api(`/leads/${leadId}/mint-code`, { method: 'POST', body: {} });
+          const ta = f.querySelector('textarea');
+          f.querySelector('[name=subject]').value = m.subject; ta.value = m.body; f.dataset.code = m.code;
+          $('#th-hint').textContent = m.reused ? `נטען הקוד הקיים של הליד (${m.code}). בדוק ושלח.` : `הונפק קוד חדש ${m.code}. בדוק ושלח.`;
+        } catch (err) {
+          if (/course_token_missing/.test(err.message)) useCode(prompt('הנפקה אוטומטית לא מוגדרת בשרת. הדבק קוד שהונפק ב-records.html / admin.html'));
+          else toast(`הנפקת הקוד נכשלה: ${err.message}`, true);
+        }
+        btn.disabled = false;
+      };
+      if (pendingCode && pendingCode.leadId === leadId) { const c = pendingCode.code; pendingCode = null; setTimeout(() => useCode(c, true), 700); }
     } else if ($('#th-code')) { $('#th-code').disabled = true; }
   }
   const sb = $('#th-suggest');
@@ -763,7 +787,7 @@ async function renderThread(leadId) {
   if (f) f.onsubmit = async (e) => {
     e.preventDefault();
     try {
-      await api(`/leads/${leadId}/email`, { method: 'POST', body: Object.fromEntries(new FormData(f)) });
+      await api(`/leads/${leadId}/email`, { method: 'POST', body: { ...Object.fromEntries(new FormData(f)), accessCode: f.dataset.code || '' } });
       toast('המייל בתור ויישלח בדקה הקרובה');
       renderMail(true);
     } catch (err) { fail(err); }
@@ -997,6 +1021,18 @@ $('#bulk-enroll').onclick = async () => {
   ({ csrf } = await r.json());
   await loadMeta();
   renderFollowups().catch(() => {});
+  // Link from records.html: #/mail?code=XXXX&email=a@b.c opens that lead's reply box with the issued code ready.
+  const dl = location.hash.match(/^#\/mail\?(.*)$/);
+  if (dl) {
+    const qs = new URLSearchParams(dl[1]);
+    history.replaceState(null, '', '#/mail');
+    try {
+      const found = await api(`/leads?q=${encodeURIComponent(qs.get('email') || '')}`);
+      const lead = (found.leads || found).find((x) => String(x.email || '').toLowerCase().includes(String(qs.get('email') || '').toLowerCase()));
+      if (lead && qs.get('code')) { pendingCode = { leadId: lead.id, code: qs.get('code') }; mailSel = lead.id; localStorage.setItem('crm.view', 'mail'); }
+      else toast('הליד לא נמצא ב-CRM: ' + (qs.get('email') || ''), true);
+    } catch (e) { /* ignore */ }
+  }
   api('/mailbox').then((rows) => flashMail(rows.filter((r) => r.awaiting).length)).catch(() => {});
   api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   let saved = 'followups';
