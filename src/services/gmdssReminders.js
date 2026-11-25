@@ -232,4 +232,4 @@ ${htmlToText(sig)}` : ''}`;
   return { code: c, sentTo: l.email };
 }
 
-module.exports = { dueInfo, segmentOf, inSendWindow, isEnabled, setEnabled, dueLeads, sendReminder, previewReminder, previewCode, runDue, sendCode, newCode, getTemplates, saveTemplates, resetTemplates, TEMPLATES, WAIT_DAYS, MAX_REMINDERS, DAILY_CAP };
+module.exports = { dueInfo, segmentOf, inSendWindow, isEnabled, setEnabled, dueLeads, sendReminder, previewReminder, previewCode, runDue, sendCode, newCode, codeEmail, getTemplates, saveTemplates, resetTemplates, TEMPLATES, WAIT_DAYS, MAX_REMINDERS, DAILY_CAP };

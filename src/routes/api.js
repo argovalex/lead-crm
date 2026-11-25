@@ -499,6 +499,20 @@ router.get('/leads/:id/thread', wrap(async (req, res) => {
   res.json({ lead, items: mailItems(msgs, acts) });
 }));
 
+// Reply tools for the mail view: ready GMDSS templates and a fresh access-code email, both merged with this lead's details.
+router.get('/leads/:id/compose-tools', wrap(async (req, res) => {
+  const { merge } = require('../services/gmdss');
+  const { newCode, codeEmail } = require('../services/gmdssReminders');
+  const { parseEmails } = require('../services/emails');
+  const lead = await prisma.lead.findUnique({ where: { id: id(req.params.id) } });
+  if (!lead) return res.status(404).json({ error: 'not_found' });
+  const addrs = parseEmails(lead.email);
+  const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } } })).find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
+  const view = gl || { organization: lead.company || lead.name, contactName: lead.name, country: lead.country, segment: lead.segment, website: lead.website, email: lead.email, phone: lead.phone, priority: lead.priority };
+  const templates = (await prisma.gmdssTemplate.findMany({ orderBy: { id: 'asc' } })).map((t) => ({ id: t.id, name: t.name, subject: merge(t.subject, view).text, body: merge(t.body, view).text }));
+  const code = (gl && gl.accessCode) || newCode();
+  res.json({ templates, code: { value: code, ...codeEmail({ organization: view.organization }, code, '') } });
+}));
 router.post('/leads/:id/suggest-reply', wrap(async (req, res) => {
   const leadId = id(req.params.id);
   const [lead, msgs, acts] = await Promise.all([

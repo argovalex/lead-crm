@@ -475,9 +475,17 @@ function flashReplies(n) {
   if (lastReplyN !== null && n > lastReplyN) toast(`תשובה חדשה מליד: ${n} ממתינות להשיב`);
   lastReplyN = n;
 }
+let lastMailN = null;
+function flashMail(n) {
+  const b = $('#mail-count');
+  b.textContent = n; b.classList.toggle('hidden', !n); b.classList.toggle('flash', n > 0);
+  if (lastMailN !== null && n > lastMailN) toast('הגיע דואר חדש');
+  lastMailN = n;
+}
 async function pollReplies() {
   if (document.hidden) return;
   try { const rows = await api('/followups'); flashReplies(rows.filter((l) => l.replied && l.nextAction === 'להשיב').length); } catch { /* ignore */ }
+  try { const rows = await api('/mailbox'); flashMail(rows.filter((r) => r.awaiting).length); } catch { /* ignore */ }
 }
 async function renderFollowups() {
   const [rows, outbox, tsum] = await Promise.all([api('/followups'), api('/outbox').catch(() => []), renderTasksBoard().catch(() => null)]);
@@ -666,8 +674,7 @@ async function renderMail(forceThread = false) {
   const list = rows.filter(ok);
   const waiting = rows.filter((r) => r.awaiting).length;
   const b = $('#mail-count');
-  b.textContent = waiting;
-  b.classList.toggle('hidden', !waiting);
+  flashMail(waiting);
   $('#mail-filters').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.f === mailFilter));
   $('#mail-list').innerHTML = list.length ? list.map((r) => `
     <div class="mrow ${r.lead.id === mailSel ? 'sel' : ''} ${r.awaiting ? 'await' : ''}" data-id="${r.lead.id}">
@@ -699,6 +706,7 @@ async function renderThread(leadId) {
         <div class="bb" dir="auto">${esc(i.body || '')}</div>
       </div>`).join('') : '<p class="muted pad">עוד לא נשלח או התקבל מייל מהליד הזה.</p>'}</div>
     ${emailable ? `<form class="th-reply" id="th-form">
+      <div class="logrow"><select id="th-tpl" aria-label="תבנית מוכנה"><option value="">＋ תבנית מוכנה…</option></select><button type="button" class="btn sm" id="th-code">🔑 קוד גישה</button></div>
       <input name="subject" placeholder="נושא" value="${esc(subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '')}" required>
       <textarea name="body" rows="7" placeholder="${lastIn ? 'כתוב תשובה…' : 'כתוב מייל…'}" required></textarea>
       <div class="logrow"><span class="muted" id="th-hint">החתימה נוספת אוטומטית. המייל יישלח בדקה הקרובה.</span>${lastIn ? '<button type="button" class="btn sm" id="th-suggest">✨ הצעת תשובה</button>' : ''}<button class="btn primary">${lastIn ? 'שלח תשובה' : 'שלח'}</button></div>
@@ -735,6 +743,21 @@ async function renderThread(leadId) {
     } catch (err) { hint.textContent = 'לא הצלחתי להכין הצעה, כתוב ידנית.'; }
   };
   if (f && lastIn && items[items.length - 1].dir === 'in') suggest(false);
+  if (f) {
+    const tools = await api(`/leads/${leadId}/compose-tools`).catch(() => null);
+    const sel = $('#th-tpl');
+    if (tools && sel) {
+      sel.insertAdjacentHTML('beforeend', tools.templates.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join(''));
+      const fill = (subject, text) => {
+        const ta = f.querySelector('textarea');
+        if (ta.value.trim() && !confirm('להחליף את הנושא והתוכן?')) return;
+        f.querySelector('[name=subject]').value = subject; ta.value = text; ta.focus();
+        $('#th-hint').textContent = 'נטען. בדוק וערוך לפני שליחה.';
+      };
+      sel.onchange = () => { const t = tools.templates.find((x) => x.id === +sel.value); sel.value = ''; if (t) fill(t.subject, t.body); };
+      $('#th-code').onclick = () => fill(tools.code.subject, tools.code.body);
+    } else if ($('#th-code')) { $('#th-code').disabled = true; }
+  }
   const sb = $('#th-suggest');
   if (sb) sb.onclick = () => suggest(true);
   if (f) f.onsubmit = async (e) => {
@@ -974,7 +997,7 @@ $('#bulk-enroll').onclick = async () => {
   ({ csrf } = await r.json());
   await loadMeta();
   renderFollowups().catch(() => {});
-  api('/mailbox').then((rows) => { const n = rows.filter((r) => r.awaiting).length; const b = $('#mail-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
+  api('/mailbox').then((rows) => flashMail(rows.filter((r) => r.awaiting).length)).catch(() => {});
   api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
   let saved = 'followups';
   try { saved = localStorage.getItem('crm.view') || 'followups'; } catch { /* ignore */ }
