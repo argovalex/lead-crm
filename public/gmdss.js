@@ -18,6 +18,7 @@ const FIT = { Course: 'קורס', Simulator: 'סימולטור', Both: 'שניה
 const dayHe = (d) => new Date(d).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' });
 const isDue = (l) => !!(!l.closedAt && l.followUpAt &&new Date(l.followUpAt) <= new Date());
 // Progress toward closing, in %: 0% = follow-up overdue, not sent, or sent but never opened (same idea as the main CRM).
+const progMatch = (pct, f) => !f || (pct != null && (f === 'z' ? pct === 0 : f === 'lo' ? pct > 0 && pct < 40 : f === 'mid' ? pct >= 40 && pct < 80 : pct >= 80));
 function gmProg(l) {
   if (l.closedAt) return { pct: null, why: '' };
   if (isDue(l)) return { pct: 0, why: 'באיחור' };
@@ -48,7 +49,7 @@ const ENG = {
   open: (l) => !l.closedAt,
 };
 const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['notsent', 'לא נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['closed', 'ארכיון']];
-const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template'];
+const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-prog', '#f-template'];
 const LTR = new Set();
 const TEXT = ['organization', 'contactName', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
 const fmt = (d) => (d ? new Date(d).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : '');
@@ -73,10 +74,12 @@ function toast(msg, err = false) {
 
 function filtered() {
   const q = $('#q').value.trim().toLowerCase();
-  const f = { country: $('#f-country').value, segment: $('#f-segment').value, productFit: $('#f-fit').value, priority: $('#f-priority').value };
+  const f = { country: $('#f-country').value, segment: $('#f-segment').value, productFit: $('#f-fit').value };
+  const pf = $('#f-prog').value;
   const tpl = $('#f-template').value, eng = $('#f-eng').value;
   const rows = leads.filter((l) => {
     for (const k in f) if (f[k] && l[k] !== f[k]) return false;
+    if (pf && !progMatch(gmProg(l).pct, pf)) return false;
     if (tpl === 'none' && l.templateId) return false;
     if (tpl && tpl !== 'none' && String(l.templateId) !== tpl) return false;
     if (eng !== 'closed' && l.closedAt) return false; // closed leads live in the archive chip only
@@ -417,8 +420,8 @@ async function poll() {
 }
 
 // ---------- Wiring ----------
-['#q', '#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template', '#f-eng'].forEach((s) => { $(s).oninput = render; });
-$('#reset').onclick = () => { ['#q', '#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template', '#f-eng'].forEach((s) => { $(s).value = ''; }); render(); };
+['#q', '#f-country', '#f-segment', '#f-fit', '#f-prog', '#f-template', '#f-eng'].forEach((s) => { $(s).oninput = render; });
+$('#reset').onclick = () => { ['#q', '#f-country', '#f-segment', '#f-fit', '#f-prog', '#f-template', '#f-eng'].forEach((s) => { $(s).value = ''; }); render(); };
 $('#f-toggle').onclick = () => {
   const open = $('#f-more').classList.toggle('hidden') === false;
   $('#f-toggle').setAttribute('aria-expanded', String(open));

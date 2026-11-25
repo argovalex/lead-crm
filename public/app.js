@@ -2,6 +2,8 @@
 const STAGE_LABELS = { NEW: 'חדש', CONTACTED: 'נוצר קשר', ENGAGED: 'מעורב', QUALIFIED: 'מתאים', PROPOSAL: 'הצעה', WON: 'נסגר ✓', LOST: 'ארכיון' };
 const STAGES = Object.keys(STAGE_LABELS);
 // Progress toward closing (server computed): a bar and %, red at 0% with the reason (באיחור / לא נשלח / לא נפתח).
+// Progress filter buckets: z = stuck at 0%, lo = 1-39, mid = 40-79, hi = 80+. Closed (null) never matches a bucket.
+const progMatch = (pct, f) => !f || (pct != null && (f === 'z' ? pct === 0 : f === 'lo' ? pct > 0 && pct < 40 : f === 'mid' ? pct >= 40 && pct < 80 : pct >= 80));
 const progHtml = (l) => {
   const p = l && l.progress;
   if (!p) return '';
@@ -86,12 +88,11 @@ async function renderLeads() {
   if (v('#f-tag')) p.set('tag', v('#f-tag'));
   if (v('#f-source')) p.set('source', v('#f-source'));
   if (v('#f-inactive')) p.set('inactiveDays', v('#f-inactive'));
-  if (v('#f-priority')) p.set('priority', v('#f-priority'));
   if (v('#f-country')) p.set('country', v('#f-country'));
   if (v('#f-activity')) p.set('activity', v('#f-activity'));
   if (v('#f-segment')) p.set('segment', v('#f-segment'));
   if ($('#f-stale').checked) p.set('stale', 'true');
-  const rows = await api(`/leads?${p}`);
+  const rows = (await api(`/leads?${p}`)).filter((l) => progMatch(l.progress && l.progress.pct, v('#f-prog')));
   const host = (u) => String(u || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
   // Keep the selection across re-renders (a filter change or the 60s auto refresh).
   const picked = new Set([...document.querySelectorAll('.sel:checked')].map((c) => c.value));
@@ -126,7 +127,7 @@ async function renderLeads() {
 }
 
 // Leads toolbar state: how many secondary filters are on, and the bulk bar for selected rows.
-const MORE_FILTERS = ['#f-tag', '#f-source', '#f-priority', '#f-segment', '#f-country', '#f-inactive', '#f-activity'];
+const MORE_FILTERS = ['#f-tag', '#f-source', '#f-prog', '#f-segment', '#f-country', '#f-inactive', '#f-activity'];
 function updateLeadsBar() {
   const on = MORE_FILTERS.filter((s) => $(s).value).length + ($('#f-stale').checked ? 1 : 0);
   $('#f-count').textContent = on;
@@ -143,7 +144,7 @@ $('#f-toggle').onclick = () => {
   $('#f-toggle').setAttribute('aria-expanded', String(open));
 };
 $('#f-clear').onclick = () => {
-  ['#f-q', '#f-stage', '#f-source', '#f-priority', '#f-inactive', '#f-activity'].forEach((s) => { $(s).value = ''; });
+  ['#f-q', '#f-stage', '#f-source', '#f-prog', '#f-inactive', '#f-activity'].forEach((s) => { $(s).value = ''; });
   $('#f-stale').checked = false;
   ['#f-tag', '#f-segment', '#f-country'].forEach((s) => {
     $(s).querySelectorAll('input:checked').forEach((c) => { c.checked = false; });
@@ -1022,7 +1023,7 @@ $('#bulk-del').onclick = () => {
 };
 let deb;
 ['#f-q'].forEach((s) => $(s).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refreshView, 250); }));
-['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-priority', '#f-country', '#f-activity', '#f-segment'].forEach((s) => $(s).addEventListener('change', renderLeads));
+['#f-stage', '#f-tag', '#f-source', '#f-inactive', '#f-stale', '#f-prog', '#f-country', '#f-activity', '#f-segment'].forEach((s) => $(s).addEventListener('change', renderLeads));
 $('#sel-all').onchange = (e) => document.querySelectorAll('.sel').forEach((c) => { c.checked = e.target.checked; });
 $('#bulk-enroll').onclick = async () => {
   const seqId = $('#bulk-seq').value;

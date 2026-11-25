@@ -45,7 +45,7 @@ function buildTasksBoard(host) {
       <input id="tb-org" placeholder="ארגון" dir="auto">
       <select id="tb-country"><option value="">כל המדינות</option></select>
       <select id="tb-leadType"><option value="">כל סוגי הלידים</option></select>
-      <select id="tb-priority"><option value="">כל העדיפויות</option><option>A</option><option>B</option><option>C</option></select>
+      <select id="tb-prog" aria-label="התקדמות"><option value="">כל ההתקדמות</option><option value="z">0% תקוע</option><option value="lo">1-39%</option><option value="mid">40-79%</option><option value="hi">80% ומעלה</option></select>
       <select id="tb-taskType"><option value="">כל סוגי המשימות</option>${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
       <select id="tb-status"><option value="">כל הסטטוסים</option>${Object.entries(TASK_STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
       <button class="btn ghost hidden" id="tb-clear" type="button">נקה סינון</button>
@@ -60,7 +60,7 @@ function buildTasksBoard(host) {
     <h3 class="tb-sub">פעולות הבאות לפי ליד</h3>`;
   TB.built = true;
   const onFilter = () => {
-    for (const k of ['q', 'org', 'country', 'leadType', 'priority', 'taskType', 'status']) TB.f[k] = $(`#tb-${k}`).value.trim();
+    for (const k of ['q', 'org', 'country', 'leadType', 'prog', 'taskType', 'status']) TB.f[k] = $(`#tb-${k}`).value.trim();
     $('#tb-clear').classList.toggle('hidden', !Object.values(TB.f).some(Boolean));
     clearTimeout(TB.timer);
     TB.timer = setTimeout(() => renderTasksBoard().catch(() => {}), 220);
@@ -84,8 +84,9 @@ async function renderTasksBoard() {
   if (!host) return null;
   if (!TB.built) buildTasksBoard(host);
   const p = new URLSearchParams({ view: TB.view, sort: TB.sort, dir: TB.dir });
-  for (const [k, v] of Object.entries(TB.f)) if (v) p.set(k, v);
-  const [rows, sum] = await Promise.all([api(`/tasks?${p}`), api('/tasks/summary')]);
+  for (const [k, v] of Object.entries(TB.f)) if (v && k !== 'prog') p.set(k, v);
+  const [all, sum] = await Promise.all([api(`/tasks?${p}`), api('/tasks/summary')]);
+  const rows = all.filter((t) => progMatch(t.lead.progress && t.lead.progress.pct, TB.f.prog));
   TB.rows = rows;
   const k = (key, n, label, cls = '') => `<div class="k ${n ? cls : ''}" data-kpi="${key}"><b>${n}</b>${label}</div>`;
   $('#tb-kpis').innerHTML = k('overdue', sum.overdue, 'משימות באיחור', 'red') + k('today', sum.today, 'להיום', 'warn') + k('week', sum.week, 'השבוע (7 ימים)')
