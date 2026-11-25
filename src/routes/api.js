@@ -481,6 +481,19 @@ const mailItems = (msgs, acts) => [
 const MSG_SEL = { leadId: true, subject: true, body: true, enrollmentId: true, status: true, createdAt: true, sentAt: true, openedAt: true, clickedAt: true };
 const MSG_OK = { in: ['SENT', 'QUEUED', 'SENDING', 'DRAFT'] };
 
+// Organization and contact person for the mail list. Lead.name is often just the email prefix (auto-created from an incoming mail), so it only counts as a contact when it differs from that prefix.
+function orgContact(lead, gls) {
+  const { parseEmails } = require('../services/emails');
+  const addrs = parseEmails(lead.email);
+  const gl = gls.find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
+  const org = (lead.company || (gl && gl.organization) || '').trim();
+  const prefix = String(addrs[0] || '').split('@')[0].toLowerCase();
+  const nm = String(lead.name || '').trim();
+  const nameIsReal = nm && nm.toLowerCase() !== prefix && nm.toLowerCase() !== org.toLowerCase();
+  const contact = ((gl && gl.contactName) || (nameIsReal ? nm : '')).trim();
+  return { org, contact };
+}
+
 router.get('/mailbox', wrap(async (req, res) => {
   const showClosed = req.query.closed === '1';
   const [msgs, acts] = await Promise.all([
@@ -497,9 +510,10 @@ router.get('/mailbox', wrap(async (req, res) => {
     byLead.set(it.leadId, c);
   });
   const rows = await prisma.lead.findMany({ where: { id: { in: [...byLead.keys()] } }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, nextAction: true, unsubscribed: true, bounced: true } });
+  const gls = await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { organization: true, contactName: true, email: true } });
   const out = rows.filter((l) => (l.stage === 'LOST') === showClosed).map((l) => {
     const c = byLead.get(l.id);
-    return { lead: l, replies: c.replies, sent: c.sent, campaign: c.campaign, pending: c.pending, awaiting: l.replied && l.nextAction === 'להשיב', last: { dir: c.last.dir, kind: c.last.kind, subject: c.last.subject, snippet: snip(c.last.body), at: c.last.at } };
+    return { lead: { ...l, ...orgContact(l, gls) }, replies: c.replies, sent: c.sent, campaign: c.campaign, pending: c.pending, awaiting: l.replied && l.nextAction === 'להשיב', last: { dir: c.last.dir, kind: c.last.kind, subject: c.last.subject, snippet: snip(c.last.body), at: c.last.at } };
   }).sort((a, b) => new Date(b.last.at) - new Date(a.last.at));
   res.json(out);
 }));
@@ -514,8 +528,9 @@ router.get('/leads/:id/thread', wrap(async (req, res) => {
   if (!lead) return res.status(404).json({ error: 'not_found' });
   const { parseEmails } = require('../services/emails');
   const addrs = parseEmails(lead.email);
-  const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true } })).find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
-  res.json({ lead: { ...lead, gmdssId: gl ? gl.id : null }, items: mailItems(msgs, acts) });
+  const gls = await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, organization: true, contactName: true } });
+  const gl = gls.find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
+  res.json({ lead: { ...lead, ...orgContact(lead, gls), gmdssId: gl ? gl.id : null }, items: mailItems(msgs, acts) });
 }));
 
 // Reply tools for the mail view: ready GMDSS templates and a fresh access-code email, both merged with this lead's details.

@@ -679,8 +679,8 @@ async function renderMail(forceThread = false) {
   $('#mail-filters').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.f === mailFilter));
   $('#mail-list').innerHTML = list.length ? list.map((r) => `
     <div class="mrow ${r.lead.id === mailSel ? 'sel' : ''} ${r.awaiting ? 'await' : ''}" data-id="${r.lead.id}">
-      <div class="m1"><b>${esc(r.lead.name)}</b><time>${ago(r.last.at)}</time></div>
-      <div class="m2 muted">${esc(r.lead.company || r.lead.email)}</div>
+      <div class="m1"><b>${esc(r.lead.org || r.lead.contact || r.lead.name)}</b><time>${ago(r.last.at)}</time></div>
+      <div class="m2 muted">${esc(r.lead.org && r.lead.contact ? r.lead.contact : r.lead.email)}</div>
       <div class="m3"><span class="dir ${r.last.dir}">${r.last.dir === 'in' ? '↩ התקבל' : '→ נשלח'}</span> <span dir="auto">${esc(r.last.subject || r.last.snippet)}</span></div>
       <div class="m4">${r.awaiting ? '<span class="flag bad">להשיב</span>' : ''}${r.replies ? `<span class="flag good">${r.replies} תשובות</span>` : ''}${r.campaign ? '<span class="flag">קמפיין</span>' : ''}${r.pending ? `<span class="flag warn">${r.pending} בתור</span>` : ''}</div>
     </div>`).join('') : '<p class="muted pad">אין שיחות. מייל שתשלח, וגם תשובה שתתקבל, יופיעו כאן.</p>';
@@ -696,7 +696,7 @@ async function renderThread(leadId) {
   const emailable = !lead.unsubscribed && !lead.bounced;
   $('#mail-thread').innerHTML = `<div class="thread">
     <div class="th-head">
-      <div><h2>${esc(lead.name)}</h2><div class="muted" dir="ltr">${esc(lead.email)}${lead.company ? ` · ${esc(lead.company)}` : ''}</div></div>
+      <div><h2>${esc(lead.org || lead.contact || lead.name)}</h2><div class="muted">${lead.org && lead.contact ? `${esc(lead.contact)} · ` : ''}<span dir="ltr">${esc(lead.email)}</span></div></div>
       <div class="th-acts"><span class="pill" style="--c:var(--s-${lead.stage})">${STAGE_LABELS[lead.stage]}</span>
         ${lead.stage === 'LOST' ? '<button class="btn sm" data-t="reopen">↺ פתח מחדש</button>' : '<button class="btn sm danger" data-t="close" title="סגירה מכל סיבה: הליד נשאר ברשימת הלידים, יוצא מהדואר, מהמשימות ומכל סבב">⛔ סגור ליד</button>'}<button class="btn sm" data-t="done" title="סיימתי עם השיחה: מוריד אותה מ'להשיב' וממשימות המעקב">✓ טופל</button><button class="btn sm" data-t="card">פתח כרטיס</button>${lead.gmdssId ? '<button class="btn sm" data-t="gcard" title="כרטיס GMDSS: קוד גישה, תבנית, היסטוריה">כרטיס GMDSS ↗</button>' : ''}<button class="btn sm danger" data-t="del">מחיקה</button></div>
     </div>
