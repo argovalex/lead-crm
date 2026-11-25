@@ -53,7 +53,7 @@ function buildTasksBoard(host) {
     <div class="table-wrap"><table class="tbl tasks-tbl">
       <thead><tr>
         <th data-sort="due" class="sortable">תאריך יעד</th><th data-sort="org" class="sortable">ארגון</th><th data-sort="title" class="sortable">משימה</th>
-        <th data-sort="type" class="sortable">סוג</th><th data-sort="priority" class="sortable">עדיפות</th><th data-sort="status" class="sortable">סטטוס</th><th>פעולות</th>
+        <th data-sort="type" class="sortable">סוג</th><th>התקדמות</th><th data-sort="status" class="sortable">סטטוס</th><th>פעולות</th>
       </tr></thead>
       <tbody id="tb-body"></tbody>
     </table></div>
@@ -101,7 +101,7 @@ async function renderTasksBoard() {
       <td class="c-org"><a href="#" class="org-link" data-lead="${t.leadId}" dir="auto">${esc(t.lead.company || t.lead.name)}</a>${t.lead.country ? `<div class="muted">${esc(t.lead.country)}</div>` : ''}</td>
       <td class="c-title" dir="auto">${t.isNextAction && isActiveTask(t) ? '<span class="nx" title="הפעולה הבאה של הליד">★</span> ' : ''}${esc(t.title)}${t.description ? `<div class="muted c-desc" dir="auto">${esc(t.description)}</div>` : ''}</td>
       <td>${TYPE_LABELS[t.taskType] || ''}</td>
-      <td>${prioFlag(t.priority)}</td>
+      <td>${progHtml(t.lead)}</td>
       <td>${statusBadge(t)}</td>
       <td class="c-acts">${isActiveTask(t) ? `
         <button class="btn sm" data-act="done" title="סמן כהושלמה" aria-label="סמן כהושלמה">✓</button>

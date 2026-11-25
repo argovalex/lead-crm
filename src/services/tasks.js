@@ -2,6 +2,7 @@
 // of other tasks. Lead.nextAction / nextFollowUpAt mirror the Next Action so the existing "today" list,
 // import and mail logic keep working; reconcileFromLead() goes the other way when that old code writes them.
 const prisma = require('../db');
+const { withProgress } = require('./progress');
 
 const TYPES = ['INITIAL_EMAIL', 'FOLLOWUP_EMAIL', 'PHONE_CALL', 'MEETING', 'SEND_PROPOSAL', 'PRODUCT_DEMO', 'NEGOTIATION', 'FINAL_DECISION', 'OTHER'];
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'WAITING', 'COMPLETED', 'CANCELLED'];
@@ -263,8 +264,9 @@ async function listTasks(q = {}, now = new Date()) {
   if (q.q) where.OR = [{ title: { contains: q.q, mode: 'insensitive' } }, { description: { contains: q.q, mode: 'insensitive' } }, { lead: { company: { contains: q.q, mode: 'insensitive' } } }, { lead: { name: { contains: q.q, mode: 'insensitive' } } }];
   if (view === 'waiting') where.status = 'WAITING';
   if (view === 'completed') where.status = 'COMPLETED';
-  const rows = await prisma.task.findMany({ where, include: { lead: { select: { id: true, name: true, company: true, country: true, segment: true, stage: true, email: true } } }, take: 3000 });
-  let out = rows.map((t) => ({ ...t, bucket: bucket(t, now) }));
+  const rows = await prisma.task.findMany({ where, include: { lead: { select: { id: true, name: true, company: true, country: true, segment: true, stage: true, email: true, replied: true, nextFollowUpAt: true } } }, take: 3000 });
+  const prog = new Map((await withProgress(rows.map((t) => t.lead))).map((l) => [l.id, l.progress]));
+  let out = rows.map((t) => ({ ...t, bucket: bucket(t, now), lead: { ...t.lead, progress: prog.get(t.lead.id) } }));
   if (['overdue', 'today', 'week'].includes(view)) {
     out = out.filter((t) => (view === 'week' ? t.bucket === 'today' || t.bucket === 'week' : t.bucket === view));
   }

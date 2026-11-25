@@ -1,5 +1,5 @@
 /* CRM dashboard — vanilla JS, no build step. */
-const STAGE_LABELS = { NEW: 'חדש', CONTACTED: 'נוצר קשר', ENGAGED: 'מעורב', QUALIFIED: 'מתאים', PROPOSAL: 'הצעה', WON: 'נסגר ✓', LOST: 'אבוד' };
+const STAGE_LABELS = { NEW: 'חדש', CONTACTED: 'נוצר קשר', ENGAGED: 'מעורב', QUALIFIED: 'מתאים', PROPOSAL: 'הצעה', WON: 'נסגר ✓', LOST: 'ארכיון' };
 const STAGES = Object.keys(STAGE_LABELS);
 // Progress toward closing (server computed): a bar and %, red at 0% with the reason (באיחור / לא נשלח / לא נפתח).
 const progHtml = (l) => {

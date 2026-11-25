@@ -9,7 +9,7 @@ const selected = new Set();
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const COLS = [
-  ['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['productFit', 'התאמה'],
+  ['organization', 'ארגון'], ['country', 'מדינה'], ['segment', 'סוג'], ['progress', 'התקדמות'],
   ['email', 'קשר'], ['emailStatus', 'סטטוס'], ['engagement', 'נמסר · נפתח · הקלקה'], ['lastEmailedAt', 'נשלח לאחרונה'], ['followUpAt', 'מעקב'],
 ];
 // Interface labels are Hebrew; lead data and everything that goes into an email stay as written.
@@ -17,6 +17,20 @@ const STATUS = { not_sent: 'לא נשלח', queued: 'בתור', sent: 'נשלח'
 const FIT = { Course: 'קורס', Simulator: 'סימולטור', Both: 'שניהם' };
 const dayHe = (d) => new Date(d).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' });
 const isDue = (l) => !!(!l.closedAt && l.followUpAt &&new Date(l.followUpAt) <= new Date());
+// Progress toward closing, in %: 0% = follow-up overdue, not sent, or sent but never opened (same idea as the main CRM).
+function gmProg(l) {
+  if (l.closedAt) return { pct: null, why: '' };
+  if (isDue(l)) return { pct: 0, why: 'באיחור' };
+  if (l.emailStatus === 'not_sent') return { pct: 0, why: 'לא נשלח' };
+  if (['failed', 'bounced'].includes(l.emailStatus)) return { pct: 0, why: 'נכשל' };
+  if (l.emailStatus === 'sent' && !l.openedAt && !l.clickedAt && !l.repliedAt) return { pct: 0, why: 'לא נפתח' };
+  return { pct: l.accessCode ? 60 : l.answeredAt ? 50 : l.repliedAt ? 40 : l.clickedAt ? 25 : l.openedAt ? 15 : 10, why: '' };
+}
+const progCell = (l) => {
+  const p = gmProg(l);
+  if (p.pct === null) return '<span class="prog closed"><b>סגור</b></span>';
+  return `<span class="prog ${p.pct === 0 ? 'zero' : p.pct >= 60 ? 'hi' : ''}"><i style="width:${p.pct}%"></i><b>${p.pct}%</b>${p.why ? `<em>${p.why}</em>` : ''}</span>`;
+};
 // Email-status filter. The summary chips above the table use the same predicates.
 const ENG = {
   sent: (l) => l.emailStatus === 'sent',
@@ -33,7 +47,7 @@ const ENG = {
   closed: (l) => !!l.closedAt,
   open: (l) => !l.closedAt,
 };
-const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['notsent', 'לא נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['closed', 'סגורים']];
+const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['notsent', 'לא נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['closed', 'ארכיון']];
 const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-priority', '#f-template'];
 const LTR = new Set();
 const TEXT = ['organization', 'contactName', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
@@ -65,10 +79,11 @@ function filtered() {
     for (const k in f) if (f[k] && l[k] !== f[k]) return false;
     if (tpl === 'none' && l.templateId) return false;
     if (tpl && tpl !== 'none' && String(l.templateId) !== tpl) return false;
+    if (eng !== 'closed' && l.closedAt) return false; // closed leads live in the archive chip only
     if (eng && !ENG[eng](l)) return false;
     return !q || TEXT.some((k) => (l[k] || '').toLowerCase().includes(q));
   });
-  const val = (l) => (sortKey === 'engagement' ? engScore(l) : l[sortKey]);
+  const val = (l) => (sortKey === 'engagement' ? engScore(l) : sortKey === 'progress' ? (gmProg(l).pct ?? -1) : l[sortKey]);
   return rows.sort((a, b) => {
     const x = val(a) ?? '', y = val(b) ?? '';
     if (x === y) return 0;
@@ -97,6 +112,7 @@ function contact(l) {
 function cell(l, k) {
   const v = l[k];
   if (k === 'email') return contact(l);
+  if (k === 'progress') return progCell(l);
   if (k === 'engagement') return l.emailStatus === 'not_sent' ? '<span class="muted-cell">—</span>' : engagement(l);
   if (k === 'template') return l.template ? `<span class="st">${esc(l.template.name)}</span>` : '<span class="muted-cell">—</span>';
   if (v == null || v === '') return '<span class="muted-cell">—</span>';
@@ -132,7 +148,7 @@ function render() {
   $('#chk-page').checked = pick.length > 0 && pick.every((l) => selected.has(l.id));
   const eng = $('#f-eng').value;
   $('#kpis').innerHTML = CHIPS.map(([k, label]) => {
-    const n = k ? leads.filter(ENG[k]).length : leads.length;
+    const n = k ? leads.filter(ENG[k]).length : leads.filter((l) => !l.closedAt).length;
     return `<button type="button" class="k ${eng === k ? 'on' : ''} ${k === 'followup' && n ? 'red' : ''}" data-eng="${k}" aria-pressed="${eng === k}"><b>${n}</b><span>${label}</span></button>`;
   }).join('');
   updateBar();
