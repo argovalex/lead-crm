@@ -252,3 +252,17 @@ test('mail sent from the GMDSS card settles an overdue reminder on the main lead
   assert.equal((await prisma.activity.count({ where: { leadId: l.id, type: 'MANUAL_EMAIL_OUT' } })), 1);
   await prisma.gmdssLead.deleteMany({ where: { email: 'od@example.com' } });
 });
+
+test('a logged manual mail sent after the due date settles an overdue reminder; a later inbound keeps it', async () => {
+  const { settleOverdueBySentMail } = require('../src/services/gmdss');
+  const a = await mkLead({ email: 'so1@example.com' });
+  const b = await mkLead({ email: 'so2@example.com' });
+  for (const l of [a, b]) {
+    await prisma.lead.update({ where: { id: l.id }, data: { nextAction: 'מעקב', nextFollowUpAt: new Date(Date.now() - 6 * DAY), lastActivityAt: new Date() } });
+    await prisma.activity.create({ data: { leadId: l.id, type: 'MANUAL_EMAIL_OUT', data: { manual: true, subject: 's' }, createdAt: new Date(Date.now() - DAY) } });
+  }
+  await prisma.activity.create({ data: { leadId: b.id, type: 'REPLY_IN', data: {}, createdAt: new Date(Date.now() - 3600000) } });
+  assert.equal(await settleOverdueBySentMail(prisma), 1);
+  assert.ok((await prisma.lead.findUnique({ where: { id: a.id } })).nextFollowUpAt > new Date());
+  assert.ok((await prisma.lead.findUnique({ where: { id: b.id } })).nextFollowUpAt < new Date());
+});

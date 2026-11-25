@@ -212,10 +212,30 @@ async function syncSentToMainAll(prisma, { force = false } = {}) {
   lastBulk = Date.now();
   const sent = await prisma.gmdssActivity.findMany({ where: { type: { in: ['first_sent', 'reply_sent'] } }, select: { lead: { select: { email: true } } } });
   const addrs = [...new Set(sent.flatMap((a) => parseEmails(a.lead.email || '')))];
-  if (!addrs.length) return 0;
-  const mains = await prisma.lead.findMany({ where: { email: { in: addrs, mode: 'insensitive' } }, select: { id: true } });
   let n = 0;
-  for (const m of mains) n += await syncSentToMainLead(prisma, m.id).catch(() => 0);
+  if (addrs.length) {
+    const mains = await prisma.lead.findMany({ where: { email: { in: addrs, mode: 'insensitive' } }, select: { id: true } });
+    for (const m of mains) n += await syncSentToMainLead(prisma, m.id).catch(() => 0);
+  }
+  return n + await settleOverdueBySentMail(prisma).catch(() => 0);
+}
+
+// An overdue reminder is settled by a mail or SMS Alex sent after it was due, as long as nothing came in after that
+// mail. This covers mail logged with its real date (import, GMDSS card, main mail screen) that did not move the
+// reminder. The reminder becomes the usual 5-day follow-up counted from that mail.
+async function settleOverdueBySentMail(prisma) {
+  const overdue = await prisma.lead.findMany({ where: { stage: { not: 'LOST' }, nextFollowUpAt: { lt: new Date() } }, select: { id: true, nextFollowUpAt: true, lastActivityAt: true } });
+  let n = 0;
+  for (const l of overdue) {
+    const [out, inn] = await Promise.all([
+      prisma.activity.findFirst({ where: { leadId: l.id, type: { in: ['MANUAL_EMAIL_OUT', 'SMS_OUT'] } }, orderBy: { createdAt: 'desc' } }),
+      prisma.activity.findFirst({ where: { leadId: l.id, type: { in: ['REPLY_IN', 'SMS_IN'] } }, orderBy: { createdAt: 'desc' } }),
+    ]);
+    if (!out || out.createdAt <= l.nextFollowUpAt || (inn && inn.createdAt > out.createdAt)) continue;
+    await prisma.lead.update({ where: { id: l.id }, data: { nextAction: 'מעקב', nextFollowUpAt: new Date(out.createdAt.getTime() + 5 * 86400000), lastActivityAt: l.lastActivityAt > out.createdAt ? l.lastActivityAt : out.createdAt, stale: false } });
+    await require('./tasks').reconcileFromLead(l.id, prisma);
+    n++;
+  }
   return n;
 }
 
@@ -272,4 +292,4 @@ async function handleGmdssEvent(prisma, event, now = new Date()) {
   return true;
 }
 
-module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, syncSentToMainLead, syncSentToMainAll, closeEverywhere, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, syncSentToMainLead, syncSentToMainAll, settleOverdueBySentMail, closeEverywhere, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
