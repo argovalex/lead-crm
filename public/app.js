@@ -691,7 +691,7 @@ async function renderMail(forceThread = false) {
       <div class="m1"><b>${esc(r.lead.org || r.lead.contact || r.lead.name)}</b><time>${ago(r.last.at)}</time></div>
       <div class="m2 muted">${esc(r.lead.org && r.lead.contact ? r.lead.contact : r.lead.email)}</div>
       <div class="m3"><span class="dir ${r.last.dir}">${r.last.dir === 'in' ? '↩ התקבל' : '→ נשלח'}</span> <span dir="auto">${esc(r.last.subject || r.last.snippet)}</span></div>
-      <div class="m4">${r.awaiting ? '<span class="flag bad">להשיב</span>' : ''}${r.replies ? `<span class="flag good">${r.replies} תשובות</span>` : ''}${r.campaign ? '<span class="flag">קמפיין</span>' : ''}${r.pending ? `<span class="flag warn">${r.pending} בתור</span>` : ''}</div>
+      <div class="m4">${progHtml(r.lead)}${r.awaiting ? '<span class="flag bad">להשיב</span>' : ''}${r.replies ? `<span class="flag good">${r.replies} תשובות</span>` : ''}${r.campaign ? '<span class="flag">קמפיין</span>' : ''}${r.pending ? `<span class="flag warn">${r.pending} בתור</span>` : ''}</div>
     </div>`).join('') : '<p class="muted pad">אין שיחות. מייל שתשלח, וגם תשובה שתתקבל, יופיעו כאן.</p>';
   $('#mail-list').querySelectorAll('.mrow').forEach((el) => el.addEventListener('click', () => { mailSel = +el.dataset.id; renderMail(true); }));
   if (mailSel && (forceThread || !$('#mail-thread .thread'))) await renderThread(mailSel);

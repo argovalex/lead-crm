@@ -556,7 +556,7 @@ router.get('/mailbox', wrap(async (req, res) => {
     c.last = it; // ascending order, so the last assignment is the newest
     byLead.set(it.leadId, c);
   });
-  const rows = await prisma.lead.findMany({ where: { id: { in: [...byLead.keys()] } }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, nextAction: true, unsubscribed: true, bounced: true } });
+  const rows = await withProgress(await prisma.lead.findMany({ where: { id: { in: [...byLead.keys()] } }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, nextAction: true, nextFollowUpAt: true, unsubscribed: true, bounced: true } }));
   const gls = await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { organization: true, contactName: true, email: true } });
   const dmap = await domainOrgMap(gls);
   const out = rows.filter((l) => (l.stage === 'LOST') === showClosed).map((l) => {
