@@ -453,7 +453,7 @@ function todayItem(l, group) {
   const d = (last && last.data) || {};
   const over = new Date(l.nextFollowUpAt) < new Date(new Date().setHours(0, 0, 0, 0));
   const note = last ? `${(ACT[last.type] || [, last.type])[1]} · ${fmt(last.createdAt)}${d.subject ? ` · ${d.subject}` : ''}` : '';
-  return `<div class="fu-item ${over ? 'over' : ''}" data-id="${l.id}" data-subject="${esc(d.subject || '')}">
+  return `<div class="fu-item ${over ? 'over' : ''} ${group === 'reply' ? 'reply-now' : ''}" data-id="${l.id}" data-subject="${esc(d.subject || '')}">
     <span class="c-name"><b>${esc(l.name)}</b><span class="muted">${esc(l.company || l.email)}${l.country ? ` · ${esc(l.country)}` : ''}</span></span>
     <span class="c-stage"><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span>${l.priority ? ` <span class="flag">${esc(l.priority)}</span>` : ''}</span>
     <span class="c-fu ${over ? 'over' : ''}">${NEXT_ICON(l.nextAction)} ${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}${over ? ' <span class="flag bad">באיחור</span>' : ''}</span>
@@ -467,6 +467,18 @@ function todayItem(l, group) {
     </span></div>`;
 }
 
+// A new customer reply must be impossible to miss: pulsing tab badge, tab title, toast, and a background poll that runs even while a card is open.
+let lastReplyN = null;
+function flashReplies(n) {
+  $('#fu-count').classList.toggle('flash', n > 0);
+  document.title = n ? `(${n}) להשיב · CRM` : 'CRM';
+  if (lastReplyN !== null && n > lastReplyN) toast(`תשובה חדשה מליד: ${n} ממתינות להשיב`);
+  lastReplyN = n;
+}
+async function pollReplies() {
+  if (document.hidden) return;
+  try { const rows = await api('/followups'); flashReplies(rows.filter((l) => l.replied && l.nextAction === 'להשיב').length); } catch { /* ignore */ }
+}
 async function renderFollowups() {
   const [rows, outbox, tsum] = await Promise.all([api('/followups'), api('/outbox').catch(() => []), renderTasksBoard().catch(() => null)]);
   const drafts = outbox.filter((m) => m.status === 'DRAFT').length;
@@ -483,6 +495,7 @@ async function renderFollowups() {
   const urgent = reply.length + dueToday.length + drafts + ((tsum && tsum.extraDue) || 0); // extra tasks due or overdue (Next Actions are already in the lead list)
   b.textContent = urgent;
   b.classList.toggle('hidden', !urgent);
+  flashReplies(reply.length);
 
   const group = (title, items, kind, emptyMsg) => `<div class="fu-group"><h3>${title} <span class="count">${items.length}</span></h3>
     ${items.length ? items.map((l) => todayItem(l, kind)).join('') : `<p class="muted">${emptyMsg}</p>`}</div>`;
@@ -968,5 +981,6 @@ $('#bulk-enroll').onclick = async () => {
   const route = routeOf();
   show(route ? route.view : (views[saved] ? saved : 'followups'), true);
   if (route && route.lead) openLead(route.lead, true).catch(fail);
+  setInterval(pollReplies, 30000);
   setInterval(() => { if (!document.hidden && !$('#modal').open && $('#drawer').classList.contains('hidden')) refreshView(); }, 60000);
 }());
