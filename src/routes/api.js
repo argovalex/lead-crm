@@ -562,7 +562,7 @@ router.post('/leads/:id/mint-code', wrap(async (req, res) => {
     } catch (e) { return res.status(502).json({ error: 'course_unreachable' }); }
     const j = await r.json().catch(() => ({}));
     code = j && j.ok && j.codes && j.codes[0] && j.codes[0].code;
-    if (!code) return res.status(502).json({ error: 'course_refused', detail: (j && (j.reason || j.error)) || r.status });
+    if (!code) return res.status(502).json({ error: `course_refused:${r.status}:${(j && (j.reason || j.error)) || ''}` });
   }
   res.json({ code, reused, ...codeEmail({ organization: (gl && gl.organization) || lead.company || lead.name }, code, '') });
 }));

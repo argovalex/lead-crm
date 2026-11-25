@@ -49,7 +49,7 @@ function toast(msg, err = false) {
   t.textContent = msg;
   t.className = `toast show${err ? ' err' : ''}`;
   clearTimeout(t._t);
-  t._t = setTimeout(() => { t.className = 'toast'; }, 2600);
+  t._t = setTimeout(() => { t.className = 'toast'; }, err ? 9000 : 2600);
 }
 const ERR = {
   message_not_editable: 'ההודעה כבר נשלחה או בוטלה', subject_and_body_required: 'נושא ותוכן חובה',
@@ -777,7 +777,16 @@ async function renderThread(leadId) {
           $('#th-hint').textContent = m.reused ? `נטען הקוד הקיים של הליד (${m.code}). בדוק ושלח.` : `הונפק קוד חדש ${m.code}. בדוק ושלח.`;
         } catch (err) {
           if (/course_token_missing/.test(err.message)) useCode(prompt('הנפקה אוטומטית לא מוגדרת בשרת. הדבק קוד שהונפק ב-records.html / admin.html'));
-          else toast(`הנפקת הקוד נכשלה: ${err.message}`, true);
+          else {
+            const m = String(err.message);
+            const why = /course_refused:(403|401)/.test(m) ? 'שרת הקורס דחה את הטוקן. COURSE_ADMIN_TOKEN שונה מ-ADMIN_TOKEN של שרת הקורס.'
+              : /course_refused:503/.test(m) ? 'מסד הנתונים של שרת הקורס לא זמין (503).'
+              : /course_refused/.test(m) ? `שרת הקורס סירב להנפיק (${m.replace('course_refused:', '')}).`
+              : /course_unreachable/.test(m) ? 'שרת הקורס לא נגיש. בדוק COURSE_API_URL ושהשרת עובד.'
+              : /lead_has_no_email/.test(m) ? 'לליד אין כתובת מייל תקינה.' : m;
+            const h = $('#th-hint'); h.textContent = `הנפקת הקוד נכשלה: ${why}`; h.style.color = 'var(--danger)';
+            toast(`הנפקת הקוד נכשלה: ${why}`, true);
+          }
         }
         btn.disabled = false;
       };
