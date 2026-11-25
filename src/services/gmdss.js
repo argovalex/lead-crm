@@ -168,6 +168,29 @@ ${String(m.body || '').slice(0, 5000)}`.trim(), m.sentAt);
   }
 }
 
+// The other direction: what Alex sent from the GMDSS card (first_sent / reply_sent) is mirrored onto the main-CRM
+// lead with the same address as a manual outgoing mail, so the "היום" window shows the same conversation.
+// Timeline plus the usual 5-day follow-up for a fresh send; older entries are added as backfill only.
+async function syncSentToMainLead(prisma, leadId) {
+  const main = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, email: true } });
+  if (!main || !main.email) return 0;
+  const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true } }))
+    .filter((l) => parseEmails(l.email).includes(main.email.toLowerCase()));
+  if (!gl.length) return 0;
+  const acts = await prisma.gmdssActivity.findMany({ where: { leadId: { in: gl.map((l) => l.id) }, type: { in: ['first_sent', 'reply_sent'] } }, orderBy: { createdAt: 'asc' } });
+  const { logInteraction } = require('./leads');
+  let n = 0;
+  for (const a of acts) {
+    const messageId = `gmdss-activity:${a.id}`;
+    if (await prisma.activity.findFirst({ where: { leadId: main.id, type: 'MANUAL_EMAIL_OUT', data: { path: ['messageId'], equals: messageId } } })) continue;
+    const detail = String(a.detail || '');
+    const nl = detail.indexOf('\n');
+    await logInteraction(main.id, { kind: 'EMAIL_OUT', subject: nl < 0 ? detail : detail.slice(0, nl), body: nl < 0 ? '' : detail.slice(nl + 1), at: a.createdAt, messageId, backfill: true }, prisma);
+    n++;
+  }
+  return n;
+}
+
 // One "closed" status across both screens. Closing a lead (from the GMDSS card or from the mail screen) moves
 // the main-CRM lead with the same address to LOST (it leaves the mail list, the to-do list and every sequence)
 // and closes the GMDSS lead (no reminders, no mass sends). Both stay in the leads lists.
@@ -221,4 +244,4 @@ async function handleGmdssEvent(prisma, event, now = new Date()) {
   return true;
 }
 
-module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, closeEverywhere, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, syncSentToMainLead, closeEverywhere, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };

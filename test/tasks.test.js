@@ -218,3 +218,18 @@ test('HTTP API: auth + csrf, create, list, complete with next, reschedule, delet
   await agent.delete(`/api/tasks/${done.body.next.id}`).set('x-csrf-token', csrf).expect(204);
   assert.equal((await prisma.lead.findUnique({ where: { id: l.id } })).nextFollowUpAt, null);
 });
+
+test('mail sent from the GMDSS card appears on the main lead timeline once', async () => {
+  const l = await mkLead({ email: 'gm@example.com' });
+  await prisma.gmdssLead.deleteMany({ where: { email: 'gm@example.com' } });
+  const gl = await prisma.gmdssLead.create({ data: { organization: 'GM Org', email: 'gm@example.com' } });
+  await prisma.gmdssActivity.create({ data: { leadId: gl.id, type: 'reply_sent', detail: 'Re: quote\nThanks, attached.' } });
+  const { syncSentToMainLead } = require('../src/services/gmdss');
+  assert.equal(await syncSentToMainLead(prisma, l.id), 1);
+  assert.equal(await syncSentToMainLead(prisma, l.id), 0);
+  const acts = await prisma.activity.findMany({ where: { leadId: l.id, type: 'MANUAL_EMAIL_OUT' } });
+  assert.equal(acts.length, 1);
+  assert.equal(acts[0].data.subject, 'Re: quote');
+  assert.equal(acts[0].data.body, 'Thanks, attached.');
+  await prisma.gmdssLead.deleteMany({ where: { email: 'gm@example.com' } });
+});

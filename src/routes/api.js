@@ -78,6 +78,8 @@ router.post('/leads', wrap(async (req, res) => {
 }));
 
 router.get('/leads/:id', wrap(async (req, res) => {
+  // Mail sent from the GMDSS card shows in this window too, so both screens carry the same conversation.
+  try { await require('../services/gmdss').syncSentToMainLead(prisma, id(req.params.id)); } catch (e) { console.error('gmdss sent sync failed', e.message); }
   const lead = await prisma.lead.findUnique({
     where: { id: id(req.params.id) },
     include: {
