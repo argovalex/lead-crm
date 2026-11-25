@@ -88,6 +88,12 @@ router.get('/leads/:id', wrap(async (req, res) => {
     },
   });
   if (!lead) return res.status(404).json({ error: 'not_found' });
+  // Queued/sent mail rows in the history carry the message text so they can be opened.
+  const msgIds = lead.activities.filter((a) => ['EMAIL_QUEUED', 'EMAIL_SENT'].includes(a.type) && a.data && a.data.messageId).map((a) => +a.data.messageId).filter(Number.isInteger);
+  if (msgIds.length) {
+    const bodies = new Map((await prisma.emailMessage.findMany({ where: { id: { in: msgIds } }, select: { id: true, body: true } })).map((m) => [m.id, m.body]));
+    lead.activities.forEach((a) => { const b = a.data && bodies.get(+a.data.messageId); if (b && ['EMAIL_QUEUED', 'EMAIL_SENT'].includes(a.type)) a.data = { ...a.data, body: b }; });
+  }
   res.json(lead);
 }));
 

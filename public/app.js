@@ -217,7 +217,7 @@ function timelineHtml(acts, actText) {
   const rows = acts.map((a) => {
     const d = a.data || {}, cat = tlCat(a.type), ic = (ACT[a.type] || ['•'])[0], label = (ACT[a.type] || [, a.type])[1];
     const head = `<span class="tl-ic">${ic}</span><b>${label}</b><span class="tl-sum">${actText(a)}</span><time>${fmt(a.createdAt)}</time>`;
-    return d.manual && d.body
+    return d.body
       ? `<li class="tl c-${cat}" data-cat="${cat}"><details><summary>${head}</summary><div dir="auto" class="tl-body">${esc(d.body)}</div></details></li>`
       : `<li class="tl c-${cat}" data-cat="${cat}"><div class="tl-row">${head}</div></li>`;
   }).join('');
@@ -332,7 +332,8 @@ async function openLead(id, replace) {
     if (!e.target.value) return;
     try { await api(`/leads/${id}/enroll`, { method: 'POST', body: { sequenceId: +e.target.value } }); toast('נוסף לרצף'); refresh(); } catch (err) { fail(err); e.target.value = ''; }
   };
-  $('#d-email').onclick = () => { const subject = replySubjects[id] || ''; delete replySubjects[id]; composeModal(l, { subject }); };
+  // Writing to a lead opens the mail screen on that lead (ready templates, access-code button, signature), not the bare compose box.
+  $('#d-email').onclick = () => { delete replySubjects[id]; closeDrawer(); mailSel = id; mailFilter = 'all'; show('mail'); };
 }
 
 
