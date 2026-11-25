@@ -698,7 +698,7 @@ async function renderThread(leadId) {
     <div class="th-head">
       <div><h2>${esc(lead.name)}</h2><div class="muted" dir="ltr">${esc(lead.email)}${lead.company ? ` · ${esc(lead.company)}` : ''}</div></div>
       <div class="th-acts"><span class="pill" style="--c:var(--s-${lead.stage})">${STAGE_LABELS[lead.stage]}</span>
-        ${lead.stage === 'LOST' ? '<button class="btn sm" data-t="reopen">↺ פתח מחדש</button>' : '<button class="btn sm danger" data-t="close" title="סגירה מכל סיבה: הליד נשאר ברשימת הלידים, יוצא מהדואר, מהמשימות ומכל סבב">⛔ סגור ליד</button>'}<button class="btn sm" data-t="done" title="סיימתי עם השיחה: מוריד אותה מ'להשיב' וממשימות המעקב">✓ טופל</button><button class="btn sm" data-t="card">פתח כרטיס</button><button class="btn sm danger" data-t="del">מחיקה</button></div>
+        ${lead.stage === 'LOST' ? '<button class="btn sm" data-t="reopen">↺ פתח מחדש</button>' : '<button class="btn sm danger" data-t="close" title="סגירה מכל סיבה: הליד נשאר ברשימת הלידים, יוצא מהדואר, מהמשימות ומכל סבב">⛔ סגור ליד</button>'}<button class="btn sm" data-t="done" title="סיימתי עם השיחה: מוריד אותה מ'להשיב' וממשימות המעקב">✓ טופל</button><button class="btn sm" data-t="card">פתח כרטיס</button>${lead.gmdssId ? '<button class="btn sm" data-t="gcard" title="כרטיס GMDSS: קוד גישה, תבנית, היסטוריה">כרטיס GMDSS ↗</button>' : ''}<button class="btn sm danger" data-t="del">מחיקה</button></div>
     </div>
     <div class="th-body">${items.length ? items.map((i) => `
       <div class="bub ${i.dir}">
@@ -729,6 +729,8 @@ async function renderThread(leadId) {
     try { await api(`/leads/${leadId}`, { method: 'PATCH', body: { nextFollowUpAt: null, nextAction: '' } }); toast('השיחה סומנה כטופלה'); renderMail(true); } catch (err) { fail(err); }
   };
   $('#mail-thread [data-t="card"]').onclick = () => openLead(leadId);
+  const gc = $('#mail-thread [data-t="gcard"]');
+  if (gc) gc.onclick = () => window.open(`/gmdss?card=${lead.gmdssId}`, '_blank');
   $('#mail-thread [data-t="del"]').onclick = () => confirmDelete([leadId], lead.name);
   const f = $('#th-form');
   const suggest = async (force) => {

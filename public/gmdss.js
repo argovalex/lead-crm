@@ -759,4 +759,6 @@ if (new URLSearchParams(location.search).has('embed')) document.body.classList.a
   variables = v.variables; emailConfigured = v.emailConfigured;
   if (v.setupMessage) { const w = $('#cfgwarn'); w.textContent = v.setupMessage; w.classList.remove('hidden'); }
   await load();
+  const deep = Number(new URLSearchParams(location.search).get('card'));
+  if (deep) openCard(deep);
 })().catch((e) => toast(e.message, true));

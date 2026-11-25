@@ -512,7 +512,10 @@ router.get('/leads/:id/thread', wrap(async (req, res) => {
     prisma.activity.findMany({ where: { leadId, type: { in: MAIL_ACTS } }, orderBy: { createdAt: 'asc' }, select: { leadId: true, type: true, data: true, createdAt: true } }),
   ]);
   if (!lead) return res.status(404).json({ error: 'not_found' });
-  res.json({ lead, items: mailItems(msgs, acts) });
+  const { parseEmails } = require('../services/emails');
+  const addrs = parseEmails(lead.email);
+  const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true } })).find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
+  res.json({ lead: { ...lead, gmdssId: gl ? gl.id : null }, items: mailItems(msgs, acts) });
 }));
 
 // Reply tools for the mail view: ready GMDSS templates and a fresh access-code email, both merged with this lead's details.
@@ -542,9 +545,17 @@ router.post('/leads/:id/mint-code', wrap(async (req, res) => {
   if (!to) return res.status(400).json({ error: 'lead_has_no_email' });
   const addrs = parseEmails(lead.email);
   const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, accessCode: true } })).find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
+  const base = (process.env.COURSE_API_URL || 'https://api.alargov.com').replace(/\/$/, '');
   let code = !req.body.fresh && gl && gl.accessCode ? gl.accessCode : null, reused = !!code;
+  if (code) {
+    // A code only counts when the course server really has it (older cards hold codes that were never issued there).
+    try {
+      const lr = await fetch(`${base}/api/admin/instructors`, { headers: { 'x-admin': token }, signal: AbortSignal.timeout(15000) });
+      const lj = await lr.json();
+      if (!(lj && lj.ok && (lj.instructors || []).some((i) => String(i.code).toUpperCase() === String(code).toUpperCase() && !i.revoked))) { code = null; reused = false; }
+    } catch (e) { return res.status(502).json({ error: 'course_unreachable' }); }
+  }
   if (!code) {
-    const base = (process.env.COURSE_API_URL || 'https://api.alargov.com').replace(/\/$/, '');
     let r;
     try {
       r = await fetch(`${base}/api/admin/promo`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin': token }, body: JSON.stringify({ name: lead.name || '', school: lead.company || '', email: to, phone: lead.phone || '' }), signal: AbortSignal.timeout(15000) });
