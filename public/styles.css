@@ -182,6 +182,7 @@ details.dd>summary{cursor:pointer;font-weight:600}
 .bub .bh{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:4px}.bub time{margin-inline-start:auto}
 .bub .kind{font-weight:600}.bub .kind.campaign{color:var(--accent)}.bub .kind.reply{color:var(--accent)}.bub .kind.manual{color:var(--ink)}
 .bub .bs{font-weight:600;margin-bottom:2px}.bub .bb{white-space:pre-wrap;font-size:13px;max-height:260px;overflow:auto;unicode-bidi:plaintext;text-align:start}
+.bub.out .bb{unicode-bidi:isolate;direction:rtl;text-align:right}
 .th-reply{border-top:1px solid var(--line);padding:12px 16px;display:flex;flex-direction:column;gap:8px}
 .th-reply textarea{resize:vertical}.th-reply .logrow{justify-content:space-between;align-items:center}
 @media(max-width:900px){.mail{grid-template-columns:1fr}.mail-list{max-height:260px}.thread{height:auto}.th-body{max-height:50vh}.bub{max-width:94%}}
