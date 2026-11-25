@@ -482,11 +482,24 @@ const MSG_SEL = { leadId: true, subject: true, body: true, enrollmentId: true, s
 const MSG_OK = { in: ['SENT', 'QUEUED', 'SENDING', 'DRAFT'] };
 
 // Organization and contact person for the mail list. Lead.name is often just the email prefix (auto-created from an incoming mail), so it only counts as a contact when it differs from that prefix.
-function orgContact(lead, gls) {
+const FREE_MAIL = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com', 'icloud.com', 'aol.com', 'walla.co.il', 'proton.me', 'protonmail.com', 'msn.com', 'gmx.com', 'mail.com']);
+const domainOf = (e) => String(e || '').split('@')[1] ? String(e).split('@')[1].trim().toLowerCase() : '';
+// domain -> known organization (from GMDSS cards and other leads), so a bare info@/training@ address still shows its company.
+async function domainOrgMap(gls) {
+  const { parseEmails } = require('../services/emails');
+  const m = new Map();
+  const add = (email, org) => { if (!org) return; parseEmails(email).forEach((e) => { const d = domainOf(e); if (d && !FREE_MAIL.has(d) && !m.has(d)) m.set(d, org.trim()); }); };
+  (await prisma.lead.findMany({ where: { company: { not: null } }, select: { email: true, company: true } })).forEach((l) => add(l.email, l.company));
+  gls.forEach((g) => add(g.email, g.organization));
+  return m;
+}
+function orgContact(lead, gls, dmap) {
   const { parseEmails } = require('../services/emails');
   const addrs = parseEmails(lead.email);
   const gl = gls.find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
-  const org = (lead.company || (gl && gl.organization) || '').trim();
+  const dom = domainOf(addrs[0]);
+  let org = (lead.company || (gl && gl.organization) || (dmap && !FREE_MAIL.has(dom) && dmap.get(dom)) || '').trim();
+  if (!org && dom && !FREE_MAIL.has(dom)) org = dom.split('.').slice(0, -1).pop().split(/[-_]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   const prefix = String(addrs[0] || '').split('@')[0].toLowerCase();
   const nm = String(lead.name || '').trim();
   const nameIsReal = nm && nm.toLowerCase() !== prefix && nm.toLowerCase() !== org.toLowerCase();
@@ -511,9 +524,10 @@ router.get('/mailbox', wrap(async (req, res) => {
   });
   const rows = await prisma.lead.findMany({ where: { id: { in: [...byLead.keys()] } }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, nextAction: true, unsubscribed: true, bounced: true } });
   const gls = await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { organization: true, contactName: true, email: true } });
+  const dmap = await domainOrgMap(gls);
   const out = rows.filter((l) => (l.stage === 'LOST') === showClosed).map((l) => {
     const c = byLead.get(l.id);
-    return { lead: { ...l, ...orgContact(l, gls) }, replies: c.replies, sent: c.sent, campaign: c.campaign, pending: c.pending, awaiting: l.replied && l.nextAction === 'להשיב', last: { dir: c.last.dir, kind: c.last.kind, subject: c.last.subject, snippet: snip(c.last.body), at: c.last.at } };
+    return { lead: { ...l, ...orgContact(l, gls, dmap) }, replies: c.replies, sent: c.sent, campaign: c.campaign, pending: c.pending, awaiting: l.replied && l.nextAction === 'להשיב', last: { dir: c.last.dir, kind: c.last.kind, subject: c.last.subject, snippet: snip(c.last.body), at: c.last.at } };
   }).sort((a, b) => new Date(b.last.at) - new Date(a.last.at));
   res.json(out);
 }));
@@ -530,7 +544,7 @@ router.get('/leads/:id/thread', wrap(async (req, res) => {
   const addrs = parseEmails(lead.email);
   const gls = await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, organization: true, contactName: true } });
   const gl = gls.find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
-  res.json({ lead: { ...lead, ...orgContact(lead, gls), gmdssId: gl ? gl.id : null }, items: mailItems(msgs, acts) });
+  res.json({ lead: { ...lead, ...orgContact(lead, gls, await domainOrgMap(gls)), gmdssId: gl ? gl.id : null }, items: mailItems(msgs, acts) });
 }));
 
 // Reply tools for the mail view: ready GMDSS templates and a fresh access-code email, both merged with this lead's details.
