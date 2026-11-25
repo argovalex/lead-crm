@@ -200,6 +200,37 @@ const NEXT_ACTIONS = ['שיחת טלפון', 'שליחת מייל', 'פגישה'
 const NEXT_ICON = (a) => (/טלפון|שיחה/.test(a || '') ? '☎' : /פגישה/.test(a || '') ? '🤝' : /מייל|להשיב|הצעה/.test(a || '') ? '✉' : '⏰');
 const isCallAction = (a) => /טלפון|שיחה/.test(a || '');
 
+// History grouped by color: one row per event, bodies fold open in place (no nested scroll boxes).
+const TL_CAT = {
+  out: ['יוצא', ['MANUAL_EMAIL_OUT', 'EMAIL_SENT', 'EMAIL_QUEUED', 'EMAIL_DELIVERED', 'SMS_OUT', 'SEQUENCE_ENROLLED']],
+  in: ['נכנס', ['REPLY_IN', 'SMS_IN', 'EMAIL_REPLIED']],
+  talk: ['שיחה/פגישה', ['CALL', 'MEETING']],
+  task: ['משימות', ['TASK_CREATED', 'TASK_COMPLETED', 'FOLLOWUP_DATE_CHANGED']],
+  note: ['הערות ושלב', ['NOTE', 'STAGE_CHANGED', 'CREATED']],
+  bad: ['בעיות', ['EMAIL_BOUNCED', 'EMAIL_COMPLAINED', 'EMAIL_FAILED', 'UNSUBSCRIBED', 'STALE_FLAGGED']],
+  track: ['מעקב מייל', ['EMAIL_OPENED', 'EMAIL_CLICKED']],
+};
+const tlCat = (type) => Object.keys(TL_CAT).find((k) => TL_CAT[k][1].includes(type)) || 'note';
+function timelineHtml(acts, actText) {
+  const present = Object.keys(TL_CAT).filter((k) => acts.some((a) => tlCat(a.type) === k));
+  const chips = `<div class="tl-chips"><button type="button" class="tl-chip on" data-cat="all">הכל · ${acts.length}</button>${present.map((k) => `<button type="button" class="tl-chip c-${k}" data-cat="${k}">${TL_CAT[k][0]} · ${acts.filter((a) => tlCat(a.type) === k).length}</button>`).join('')}</div>`;
+  const rows = acts.map((a) => {
+    const d = a.data || {}, cat = tlCat(a.type), ic = (ACT[a.type] || ['•'])[0], label = (ACT[a.type] || [, a.type])[1];
+    const head = `<span class="tl-ic">${ic}</span><b>${label}</b><span class="tl-sum">${actText(a)}</span><time>${fmt(a.createdAt)}</time>`;
+    return d.manual && d.body
+      ? `<li class="tl c-${cat}" data-cat="${cat}"><details><summary>${head}</summary><div dir="auto" class="tl-body">${esc(d.body)}</div></details></li>`
+      : `<li class="tl c-${cat}" data-cat="${cat}"><div class="tl-row">${head}</div></li>`;
+  }).join('');
+  return `${chips}<ul class="timeline tl-list">${rows}</ul>`;
+}
+document.addEventListener('click', (e) => {
+  const chip = e.target.closest('.tl-chip');
+  if (!chip) return;
+  const root = chip.closest('section'), cat = chip.dataset.cat;
+  root.querySelectorAll('.tl-chip').forEach((c) => c.classList.toggle('on', c === chip));
+  root.querySelectorAll('li.tl').forEach((li) => { li.hidden = cat !== 'all' && li.dataset.cat !== cat; });
+});
+
 const replySubjects = {};
 async function openLead(id, replace) {
   const [l, taskList] = await Promise.all([api(`/leads/${id}`), api(`/leads/${id}/tasks`).catch(() => [])]);
@@ -211,7 +242,7 @@ async function openLead(id, replace) {
     if (a.type === 'NOTE') return esc(d.text);
     if (a.type === 'TASK_CREATED' || a.type === 'TASK_COMPLETED') return `<span dir="auto">${esc(d.title)}</span>`;
     if (a.type === 'FOLLOWUP_DATE_CHANGED') return `<span dir="auto">${esc(d.title)}</span> <span class="muted">(${esc(d.from)} ← ${esc(d.to)})</span>`;
-    if (d.manual) return `${d.subject ? `<span dir="auto" style="unicode-bidi:plaintext">"${esc(d.subject)}"</span>` : ''}${d.body ? `<div dir="auto" class="body ${['REPLY_IN', 'SMS_IN'].includes(a.type) ? 'in' : ''}">${esc(d.body)}</div>` : ''}`;
+    if (d.manual) return d.subject ? `<span dir="auto" style="unicode-bidi:plaintext">"${esc(d.subject)}"</span>` : '';
     if (d.subject) return `"${esc(d.subject)}"`;
     if (d.name) return esc(d.name);
     if (d.link) return esc(d.link);
@@ -236,8 +267,7 @@ async function openLead(id, replace) {
     </div>
     ${nextActionHtml(l, nextTask, STAGES, STAGE_LABELS)}
     ${leadTasksHtml(taskList)}
-    <section><h4>ציר זמן</h4><ul class="timeline">${l.activities.map((a) => `
-      <li><span class="ic">${(ACT[a.type] || ['•'])[0]}</span><div><b>${(ACT[a.type] || [, a.type])[1]}</b> <time>${fmt(a.createdAt)}</time>${actText(a)}</div></li>`).join('')}</ul></section>
+    <section><h4>היסטוריה</h4>${timelineHtml(l.activities, actText)}</section>
     <section>
       <h4>תיעוד אינטראקציה</h4>
       <form id="d-log" style="display:flex;flex-direction:column;gap:6px">
