@@ -311,3 +311,8 @@ details.dd>summary{cursor:pointer;font-weight:600}
 .badge.flash{background:#dc2626;animation:pulse-red 1.2s infinite}
 .fu-item.reply-now{border-inline-start:5px solid #dc2626;background:#fef2f2;animation:pulse-red 1.8s 3}
 @media(prefers-reduced-motion:reduce){.badge.flash,.fu-item.reply-now{animation:none}}
+.prog{position:relative;display:inline-flex;align-items:center;gap:6px;min-width:96px;height:22px;padding:0 8px;border-radius:99px;background:#E8EEF5;overflow:hidden;font-size:12px;color:#17365D;vertical-align:middle}
+.prog i{position:absolute;inset-block:0;inset-inline-start:0;background:#9CC3E6;opacity:.75}
+.prog b,.prog em{position:relative;font-style:normal}.prog b{font-weight:700}
+.prog.hi i{background:#8FD0A9}.prog.zero{background:#FBE4E4;color:#9B1C1C}.prog.closed{background:#EEF0F3;color:#64748B}
+.prog em{font-weight:600}

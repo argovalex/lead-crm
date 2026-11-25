@@ -1,6 +1,14 @@
 /* CRM dashboard — vanilla JS, no build step. */
 const STAGE_LABELS = { NEW: 'חדש', CONTACTED: 'נוצר קשר', ENGAGED: 'מעורב', QUALIFIED: 'מתאים', PROPOSAL: 'הצעה', WON: 'נסגר ✓', LOST: 'אבוד' };
 const STAGES = Object.keys(STAGE_LABELS);
+// Progress toward closing (server computed): a bar and %, red at 0% with the reason (באיחור / לא נשלח / לא נפתח).
+const progHtml = (l) => {
+  const p = l && l.progress;
+  if (!p) return '';
+  if (p.pct === null) return '<span class="prog closed"><b>סגור</b></span>';
+  const cls = p.pct === 0 ? 'zero' : p.pct >= 80 ? 'hi' : '';
+  return `<span class="prog ${cls}" title="התקדמות לקראת סגירה"><i style="width:${p.pct}%"></i><b>${p.pct}%</b>${p.why ? `<em>${p.why}</em>` : ''}</span>`;
+};
 const ACT = {
   CREATED: ['＋', 'ליד נוצר'], NOTE: ['✎', 'הערה'], STAGE_CHANGED: ['→', 'שינוי שלב'],
   EMAIL_QUEUED: ['⧗', 'מייל בתור'], EMAIL_SENT: ['✉', 'מייל נשלח'], EMAIL_DELIVERED: ['✓', 'נמסר'],
@@ -96,7 +104,7 @@ async function renderLeads() {
       <td>${l.website ? `<a href="${esc(/^https?:/i.test(l.website) ? l.website : `https://${l.website}`)}" target="_blank" rel="noopener" dir="ltr">${esc(host(l.website))}</a>` : ''}</td>
       <td class="c-contact" dir="ltr"><div>${esc(l.email)}</div>${l.phone ? `<div class="muted">${esc(l.phone)}</div>` : ''}</td>
       <td class="c-why" title="${esc(l.notes)}">${esc(l.notes)}</td>
-      <td><select class="c-stage" aria-label="שלב" style="--c:var(--s-${l.stage})">${STAGES.map((st) => `<option value="${st}" ${st === l.stage ? 'selected' : ''}>${STAGE_LABELS[st]}</option>`).join('')}</select></td>
+      <td><select class="c-stage" aria-label="שלב" style="--c:var(--s-${l.stage})">${STAGES.map((st) => `<option value="${st}" ${st === l.stage ? 'selected' : ''}>${STAGE_LABELS[st]}</option>`).join('')}</select>${progHtml(l)}</td>
       <td title="${fmt(l.lastActivityAt)}">${ago(l.lastActivityAt)}${l.stale ? ' <span class="flag warn">רדום</span>' : ''}${l.nextFollowUpAt ? `<div class="c-fu ${fuState(l) === 'over' ? 'over' : 'muted'}">${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}</div>` : ''}</td>
       <td><button class="btn sm ghost danger" data-del="${l.id}" data-name="${esc(l.name)}" title="מחיקה" aria-label="מחיקה">🗑</button></td>
     </tr>`).join('') : '<tr><td colspan="10" class="muted">אין לידים תואמים</td></tr>';
@@ -255,7 +263,7 @@ async function openLead(id, replace) {
 
   $('#drawer-body').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
-      <div><h2>${esc(l.name)}</h2><div class="muted">${esc(l.email)}</div>${flagsHtml(l)}</div>
+      <div><h2>${esc(l.name)}</h2><div class="muted">${esc(l.email)}</div>${progHtml(l)}${flagsHtml(l)}</div>
       <button class="btn ghost" id="d-close" aria-label="סגור">✕</button>
     </div>
     <div class="actions">
@@ -456,7 +464,7 @@ function todayItem(l, group) {
   const note = last ? `${(ACT[last.type] || [, last.type])[1]} · ${fmt(last.createdAt)}${d.subject ? ` · ${d.subject}` : ''}` : '';
   return `<div class="fu-item ${over ? 'over' : ''} ${group === 'reply' ? 'reply-now' : ''}" data-id="${l.id}" data-subject="${esc(d.subject || '')}">
     <span class="c-name"><b>${esc(l.name)}</b><span class="muted">${esc(l.company || l.email)}${l.country ? ` · ${esc(l.country)}` : ''}</span></span>
-    <span class="c-stage"><span class="pill" style="--c:var(--s-${l.stage})">${STAGE_LABELS[l.stage]}</span>${l.priority ? ` <span class="flag">${esc(l.priority)}</span>` : ''}</span>
+    <span class="c-stage">${progHtml(l)}</span>
     <span class="c-fu ${over ? 'over' : ''}">${NEXT_ICON(l.nextAction)} ${esc(l.nextAction || 'מעקב')} · ${dateHe(l.nextFollowUpAt)}${over ? ' <span class="flag bad">באיחור</span>' : ''}</span>
     <span class="c-note muted" dir="auto" title="${esc(d.body ? d.body.slice(0, 400) : note)}">${esc(note)}</span>
     <span class="acts">
@@ -698,7 +706,7 @@ async function renderThread(leadId) {
   $('#mail-thread').innerHTML = `<div class="thread">
     <div class="th-head">
       <div><h2>${esc(lead.org || lead.contact || lead.name)}</h2><div class="muted">${lead.org && lead.contact ? `${esc(lead.contact)} · ` : ''}<span dir="ltr">${esc(lead.email)}</span></div></div>
-      <div class="th-acts"><span class="pill" style="--c:var(--s-${lead.stage})">${STAGE_LABELS[lead.stage]}</span>
+      <div class="th-acts">${progHtml(lead)}
         ${lead.stage === 'LOST' ? '<button class="btn sm" data-t="reopen">↺ פתח מחדש</button>' : '<button class="btn sm danger" data-t="close" title="סגירה מכל סיבה: הליד נשאר ברשימת הלידים, יוצא מהדואר, מהמשימות ומכל סבב">⛔ סגור ליד</button>'}<button class="btn sm" data-t="done" title="סיימתי עם השיחה: מוריד אותה מ'להשיב' וממשימות המעקב">✓ טופל</button><button class="btn sm" data-t="card">פתח כרטיס</button>${lead.gmdssId ? '<button class="btn sm" data-t="gcard" title="כרטיס GMDSS: קוד גישה, תבנית, היסטוריה">כרטיס GMDSS ↗</button>' : ''}<button class="btn sm danger" data-t="del">מחיקה</button></div>
     </div>
     <div class="th-body">${items.length ? items.map((i) => `

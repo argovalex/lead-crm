@@ -36,6 +36,33 @@ const ACTIVITY_FILTERS = {
   enrolled: ['SEQUENCE_ENROLLED'],
   failed: ['EMAIL_FAILED'],
 };
+// Progress toward closing, in %. It replaces the stage and priority labels in the UI.
+// 0% means stuck: follow-up overdue, nothing sent, or mail sent but never opened.
+const STAGE_PCT = { NEW: 5, CONTACTED: 15, ENGAGED: 40, QUALIFIED: 60, PROPOSAL: 80 };
+const jerDay = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+async function withProgress(rows) {
+  const ids = rows.map((r) => r.id);
+  if (!ids.length) return rows;
+  const [msgs, ext] = await Promise.all([
+    prisma.emailMessage.findMany({ where: { leadId: { in: ids }, status: 'SENT' }, select: { leadId: true, openedAt: true, clickedAt: true } }),
+    prisma.activity.findMany({ where: { leadId: { in: ids }, type: { in: ['MANUAL_EMAIL_OUT', 'EMAIL_SENT'] } }, select: { leadId: true }, distinct: ['leadId'] }),
+  ]);
+  const tracked = new Map(), extSent = new Set(ext.map((a) => a.leadId));
+  msgs.forEach((m) => { const t = tracked.get(m.leadId) || { n: 0, opened: false }; t.n += 1; if (m.openedAt || m.clickedAt) t.opened = true; tracked.set(m.leadId, t); });
+  const today = jerDay(Date.now());
+  return rows.map((l) => {
+    const t = tracked.get(l.id), sent = !!t || extSent.has(l.id);
+    let pct, why = '';
+    if (l.stage === 'WON') pct = 100;
+    else if (l.stage === 'LOST') pct = null;
+    else if (l.nextFollowUpAt && jerDay(l.nextFollowUpAt) < today) { pct = 0; why = 'באיחור'; }
+    else if (!sent && !l.replied) { pct = 0; why = 'לא נשלח'; }
+    else if (t && !t.opened && !l.replied) { pct = 0; why = 'לא נפתח'; }
+    else pct = Math.max(STAGE_PCT[l.stage] || 0, l.replied ? STAGE_PCT.ENGAGED : 0, t && t.opened ? STAGE_PCT.CONTACTED : sent ? 10 : 0);
+    return { ...l, progress: { pct, why } };
+  });
+}
+
 router.get('/leads', wrap(async (req, res) => {
   const { stage, tag, source, q, inactiveDays, stale, priority, country, activity, segment } = req.query;
   const where = {};
@@ -55,7 +82,7 @@ router.get('/leads', wrap(async (req, res) => {
   if (inactiveDays) where.lastActivityAt = { lt: new Date(Date.now() - Number(inactiveDays) * email.DAY) };
   if (q) where.OR = ['name', 'email', 'company', 'phone', 'segment', 'website', 'notes', 'country'].map((f) => ({ [f]: { contains: q, mode: 'insensitive' } }));
   const rows = await prisma.lead.findMany({ where, orderBy: { lastActivityAt: 'desc' }, take: 1000 });
-  res.json(rows);
+  res.json(await withProgress(rows));
 }));
 
 router.get('/leads/meta', wrap(async (_req, res) => {
@@ -88,6 +115,7 @@ router.get('/leads/:id', wrap(async (req, res) => {
     },
   });
   if (!lead) return res.status(404).json({ error: 'not_found' });
+  lead.progress = (await withProgress([lead]))[0].progress;
   // Queued/sent mail rows in the history carry the message text so they can be opened.
   const msgIds = lead.activities.filter((a) => ['EMAIL_QUEUED', 'EMAIL_SENT'].includes(a.type) && a.data && a.data.messageId).map((a) => +a.data.messageId).filter(Number.isInteger);
   if (msgIds.length) {
@@ -159,7 +187,7 @@ router.get('/followups', wrap(async (_req, res) => {
     orderBy: { nextFollowUpAt: 'asc' }, take: 500,
     include: { activities: { where: { type: { in: ['REPLY_IN', 'SMS_IN', 'MANUAL_EMAIL_OUT', 'SMS_OUT', 'CALL', 'MEETING', 'NOTE'] } }, orderBy: { createdAt: 'desc' }, take: 1 } },
   });
-  res.json(rows);
+  res.json(await withProgress(rows));
 }));
 
 // Write a new email to any address: finds or creates the lead, then queues the message.
@@ -541,7 +569,7 @@ router.get('/mailbox', wrap(async (req, res) => {
 router.get('/leads/:id/thread', wrap(async (req, res) => {
   const leadId = id(req.params.id);
   const [lead, msgs, acts] = await Promise.all([
-    prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, unsubscribed: true, bounced: true } }),
+    prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, name: true, email: true, company: true, stage: true, replied: true, nextFollowUpAt: true, unsubscribed: true, bounced: true } }),
     prisma.emailMessage.findMany({ where: { leadId, status: { in: MSG_OK.in } }, orderBy: { createdAt: 'asc' }, select: MSG_SEL }),
     prisma.activity.findMany({ where: { leadId, type: { in: MAIL_ACTS } }, orderBy: { createdAt: 'asc' }, select: { leadId: true, type: true, data: true, createdAt: true } }),
   ]);
@@ -550,7 +578,7 @@ router.get('/leads/:id/thread', wrap(async (req, res) => {
   const addrs = parseEmails(lead.email);
   const gls = await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true, organization: true, contactName: true } });
   const gl = gls.find((g) => parseEmails(g.email).some((e) => addrs.includes(e)));
-  res.json({ lead: { ...lead, ...orgContact(lead, gls, await domainOrgMap(gls)), gmdssId: gl ? gl.id : null }, items: mailItems(msgs, acts) });
+  res.json({ lead: { ...lead, progress: (await withProgress([lead]))[0].progress, ...orgContact(lead, gls, await domainOrgMap(gls)), gmdssId: gl ? gl.id : null }, items: mailItems(msgs, acts) });
 }));
 
 // Reply tools for the mail view: ready GMDSS templates and a fresh access-code email, both merged with this lead's details.
