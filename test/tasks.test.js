@@ -233,3 +233,22 @@ test('mail sent from the GMDSS card appears on the main lead timeline once', asy
   assert.equal(acts[0].data.body, 'Thanks, attached.');
   await prisma.gmdssLead.deleteMany({ where: { email: 'gm@example.com' } });
 });
+
+test('mail sent from the GMDSS card settles an overdue reminder on the main lead', async () => {
+  const l = await mkLead({ email: 'od@example.com' });
+  await prisma.lead.update({ where: { id: l.id }, data: { nextAction: 'מעקב', nextFollowUpAt: new Date(Date.now() - 3 * DAY) } });
+  await tasks.reconcileFromLead(l.id, prisma);
+  await prisma.gmdssLead.deleteMany({ where: { email: 'od@example.com' } });
+  const gl = await prisma.gmdssLead.create({ data: { organization: 'OD Org', email: 'od@example.com' } });
+  const sentAt = new Date(Date.now() - DAY);
+  await prisma.gmdssActivity.create({ data: { leadId: gl.id, type: 'reply_sent', detail: 'Re: x\nbody', createdAt: sentAt } });
+  const { syncSentToMainAll } = require('../src/services/gmdss');
+  await syncSentToMainAll(prisma, { force: true });
+  const after = await prisma.lead.findUnique({ where: { id: l.id } });
+  assert.ok(after.nextFollowUpAt > new Date(), 'follow-up moved to the future');
+  const next = await prisma.task.findFirst({ where: { leadId: l.id, isNextAction: true, status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING'] } } });
+  assert.ok(next && next.dueDate > new Date(Date.now() - DAY), 'next action task is no longer overdue');
+  await syncSentToMainAll(prisma, { force: true });
+  assert.equal((await prisma.activity.count({ where: { leadId: l.id, type: 'MANUAL_EMAIL_OUT' } })), 1);
+  await prisma.gmdssLead.deleteMany({ where: { email: 'od@example.com' } });
+});

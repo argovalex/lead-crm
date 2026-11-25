@@ -220,6 +220,7 @@ router.post('/leads/:id/reply', wrap(async (req, res) => {
   await logActivity(prisma, lead.id, first ? 'first_sent' : 'reply_sent', `${subject}\n${text}`);
   await prisma.gmdssLead.update({ where: { id: lead.id }, data: { followUpAt: new Date(Date.now() + FUP_DAYS * 86400000), ...(first ? { emailStatus: 'sent', lastEmailedAt: new Date(), lastError: null, ...(sent && sent.providerId ? { providerId: sent.providerId } : {}) } : {}) } });
   await prisma.setting.deleteMany({ where: { key: `${DRAFT}${lead.id}` } });
+  try { await require('../services/gmdss').syncSentToMainAll(prisma, { force: true }); } catch (e) { console.error('gmdss sent sync failed', e.message); } // main "היום" lead stays in step at once
   res.json({ sentTo: lead.email });
 }));
 

@@ -10,8 +10,10 @@ const id = (v) => {
   return n;
 };
 
-router.get('/', wrap(async (req, res) => res.json(await tasks.listTasks(req.query))));
-router.get('/summary', wrap(async (_req, res) => res.json(await tasks.summary())));
+// Mail sent from a GMDSS card settles the lead's due reminder here too (throttled; a failure never blocks the list).
+const syncGmdss = () => require('../services/gmdss').syncSentToMainAll(prisma).catch((e) => console.error('gmdss sent sync failed', e.message));
+router.get('/', wrap(async (req, res) => { await syncGmdss(); res.json(await tasks.listTasks(req.query)); }));
+router.get('/summary', wrap(async (_req, res) => { await syncGmdss(); res.json(await tasks.summary()); }));
 router.get('/no-next-action', wrap(async (_req, res) => res.json(await tasks.leadsWithoutNext())));
 router.get('/meta', wrap(async (_req, res) => {
   const [countries, types] = await Promise.all([

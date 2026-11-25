@@ -147,6 +147,7 @@ router.post('/interactions', wrap(async (req, res) => {
 
 // Leads that need action: follow-up due or overdue, plus replies awaiting an answer.
 router.get('/followups', wrap(async (_req, res) => {
+  try { await require('../services/gmdss').syncSentToMainAll(prisma); } catch (e) { console.error('gmdss sent sync failed', e.message); }
   const rows = await prisma.lead.findMany({
     where: { nextFollowUpAt: { not: null }, stage: { notIn: ['WON', 'LOST'] }, unsubscribed: false },
     orderBy: { nextFollowUpAt: 'asc' }, take: 500,

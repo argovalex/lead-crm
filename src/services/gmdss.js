@@ -188,6 +188,34 @@ async function syncSentToMainLead(prisma, leadId) {
     await logInteraction(main.id, { kind: 'EMAIL_OUT', subject: nl < 0 ? detail : detail.slice(0, nl), body: nl < 0 ? '' : detail.slice(nl + 1), at: a.createdAt, messageId, backfill: true }, prisma);
     n++;
   }
+  // A mail sent from the card answers whatever was due before it. If it is newer than the lead's last inbound
+  // message and the open reminder was due before it (or is "reply"), the reminder moves to the usual 5-day follow-up.
+  const last = acts.length ? acts[acts.length - 1] : null;
+  if (last) {
+    const lead = await prisma.lead.findUnique({ where: { id: main.id } });
+    const lastIn = await prisma.activity.findFirst({ where: { leadId: main.id, type: { in: ['REPLY_IN', 'SMS_IN'] } }, orderBy: { createdAt: 'desc' } });
+    const answered = !lastIn || last.createdAt > lastIn.createdAt;
+    const due = lead.nextFollowUpAt && (lead.nextAction === 'להשיב' || lead.nextFollowUpAt < last.createdAt);
+    if (answered && due && lead.stage !== 'LOST') {
+      await prisma.lead.update({ where: { id: main.id }, data: { nextAction: 'מעקב', nextFollowUpAt: new Date(last.createdAt.getTime() + 5 * 86400000), lastActivityAt: lead.lastActivityAt > last.createdAt ? lead.lastActivityAt : last.createdAt, stale: false } });
+      await require('./tasks').reconcileFromLead(main.id, prisma);
+      n++;
+    }
+  }
+  return n;
+}
+
+// Same for every main lead that has mail sent from a GMDSS card; throttled so list screens can call it freely.
+let lastBulk = 0;
+async function syncSentToMainAll(prisma, { force = false } = {}) {
+  if (!force && Date.now() - lastBulk < 60000) return 0;
+  lastBulk = Date.now();
+  const sent = await prisma.gmdssActivity.findMany({ where: { type: { in: ['first_sent', 'reply_sent'] } }, select: { lead: { select: { email: true } } } });
+  const addrs = [...new Set(sent.flatMap((a) => parseEmails(a.lead.email || '')))];
+  if (!addrs.length) return 0;
+  const mains = await prisma.lead.findMany({ where: { email: { in: addrs, mode: 'insensitive' } }, select: { id: true } });
+  let n = 0;
+  for (const m of mains) n += await syncSentToMainLead(prisma, m.id).catch(() => 0);
   return n;
 }
 
@@ -244,4 +272,4 @@ async function handleGmdssEvent(prisma, event, now = new Date()) {
   return true;
 }
 
-module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, syncSentToMainLead, closeEverywhere, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
+module.exports = { handleGmdssEvent, logActivity, logReply, findReplyLead, syncReplies, syncSentMail, syncSentToMainLead, syncSentToMainAll, closeEverywhere, VARIABLES, splitContact, parseCsv, importRows, merge, valuesFor };
