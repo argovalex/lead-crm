@@ -253,6 +253,7 @@ const SORTS = { due: 'dueDate', org: 'org', title: 'title', type: 'taskType', pr
 async function listTasks(q = {}, now = new Date()) {
   const view = VIEWS.includes(q.view) ? q.view : 'all';
   const where = { lead: { stage: { not: 'LOST' } } };
+  if (view !== 'completed' && !q.leadId && !q.q) where.lead.stale = false; // dormant leads stay out of the task lists
   const list = (v) => String(v).split(',').map((x) => x.trim()).filter(Boolean);
   if (q.priority) where.priority = { in: list(q.priority) };
   if (q.taskType) where.taskType = { in: list(q.taskType) };
@@ -282,7 +283,7 @@ async function listTasks(q = {}, now = new Date()) {
 }
 
 async function summary(now = new Date()) {
-  const rows = await prisma.task.findMany({ where: { status: { in: ACTIVE }, lead: { stage: { not: 'LOST' } } }, select: { id: true, dueDate: true, status: true, leadId: true } });
+  const rows = await prisma.task.findMany({ where: { status: { in: ACTIVE }, lead: { stage: { not: 'LOST' }, stale: false } }, select: { id: true, dueDate: true, status: true, leadId: true } });
   const c = { overdue: 0, today: 0, week: 0, waiting: 0, extraDue: 0 };
   const nextIds = new Set((await prisma.task.findMany({ where: { isNextAction: true, status: { in: ACTIVE } }, select: { id: true } })).map((t) => t.id));
   for (const t of rows) {
@@ -294,7 +295,7 @@ async function summary(now = new Date()) {
     if (t.status === 'WAITING') c.waiting += 1;
   }
   const noNext = await prisma.lead.count({
-    where: { stage: { notIn: ['WON', 'LOST'] }, unsubscribed: false, bounced: false, nextFollowUpAt: null, tasks: { none: { isNextAction: true, status: { in: ACTIVE } } } },
+    where: { stage: { notIn: ['WON', 'LOST'] }, stale: false, unsubscribed: false, bounced: false, nextFollowUpAt: null, tasks: { none: { isNextAction: true, status: { in: ACTIVE } } } },
   });
   const review = await prisma.lead.count({ where: { replied: true, nextAction: 'להשיב', stage: { notIn: ['WON', 'LOST'] }, unsubscribed: false } });
   return { overdue: c.overdue, today: c.today, week: c.week, waiting: c.waiting, extraDue: c.extraDue, noNextAction: noNext, needsReview: review };
@@ -302,7 +303,7 @@ async function summary(now = new Date()) {
 
 async function leadsWithoutNext() {
   return prisma.lead.findMany({
-    where: { stage: { notIn: ['WON', 'LOST'] }, unsubscribed: false, bounced: false, nextFollowUpAt: null, tasks: { none: { isNextAction: true, status: { in: ACTIVE } } } },
+    where: { stage: { notIn: ['WON', 'LOST'] }, stale: false, unsubscribed: false, bounced: false, nextFollowUpAt: null, tasks: { none: { isNextAction: true, status: { in: ACTIVE } } } },
     select: { id: true, name: true, company: true, country: true, segment: true, stage: true, priority: true },
     orderBy: { lastActivityAt: 'desc' }, take: 300,
   });
