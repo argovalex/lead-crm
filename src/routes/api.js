@@ -53,6 +53,7 @@ router.get('/leads', wrap(async (req, res) => {
   if (tag) where.tags = { hasSome: list(tag) };
   if (source) where.source = source;
   if (stale === 'true') where.stale = true;
+  else if (!q) where.stale = false; // dormant leads leave the main list; shown only under the dormant filter or in a search
   if (inactiveDays) where.lastActivityAt = { lt: new Date(Date.now() - Number(inactiveDays) * email.DAY) };
   if (q) where.OR = ['name', 'email', 'company', 'phone', 'segment', 'website', 'notes', 'country'].map((f) => ({ [f]: { contains: q, mode: 'insensitive' } }));
   const rows = await prisma.lead.findMany({ where, orderBy: { lastActivityAt: 'desc' }, take: 1000 });
@@ -157,7 +158,7 @@ router.post('/interactions', wrap(async (req, res) => {
 router.get('/followups', wrap(async (_req, res) => {
   try { await require('../services/gmdss').syncSentToMainAll(prisma); } catch (e) { console.error('gmdss sent sync failed', e.message); }
   const rows = await prisma.lead.findMany({
-    where: { nextFollowUpAt: { not: null }, stage: { notIn: ['WON', 'LOST'] }, unsubscribed: false },
+    where: { nextFollowUpAt: { not: null }, stage: { notIn: ['WON', 'LOST'] }, unsubscribed: false, stale: false },
     orderBy: { nextFollowUpAt: 'asc' }, take: 500,
     include: { activities: { where: { type: { in: ['REPLY_IN', 'SMS_IN', 'MANUAL_EMAIL_OUT', 'SMS_OUT', 'CALL', 'MEETING', 'NOTE'] } }, orderBy: { createdAt: 'desc' }, take: 1 } },
   });
