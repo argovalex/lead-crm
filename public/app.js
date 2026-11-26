@@ -1063,7 +1063,7 @@ $('#bulk-enroll').onclick = async () => {
     } catch (e) { /* ignore */ }
   }
   api('/mailbox').then((rows) => flashMail(rows.filter((r) => r.awaiting).length)).catch(() => {});
-  api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); b.textContent = n; b.classList.toggle('hidden', !n); }).catch(() => {});
+  api('/outbox').then((rows) => { const n = rows.filter((m) => m.status === 'DRAFT').length; const b = $('#ob-count'); if (b) { b.textContent = n; b.classList.toggle('hidden', !n); } }).catch(() => {});
   let saved = 'followups';
   try { saved = localStorage.getItem('crm.view') || 'followups'; } catch { /* ignore */ }
   const route = routeOf();
