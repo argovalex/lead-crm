@@ -714,7 +714,7 @@ async function renderThread(leadId) {
       <div class="bub ${i.dir}">
         <div class="bh"><span class="kind ${i.kind}">${KIND_LABEL[i.kind] || ''}</span>${MSTATUS[i.status] ? `<span class="flag warn">${MSTATUS[i.status]}</span>` : ''}${i.opened ? '<span class="flag good">נפתח</span>' : ''}${i.clicked ? '<span class="flag good">לחיצה</span>' : ''}<time>${fmt(i.at)}</time></div>
         ${i.subject ? `<div class="bs" dir="auto">${esc(i.subject)}</div>` : ''}
-        <div class="bb" dir="${i.dir === 'out' ? 'rtl' : 'auto'}">${esc(i.body || '')}</div>
+        <div class="bb" dir="auto">${esc(i.body || '')}</div>
       </div>`).join('') : '<p class="muted pad">עוד לא נשלח או התקבל מייל מהליד הזה.</p>'}</div>
     ${emailable ? `<form class="th-reply" id="th-form">
       <div class="logrow"><select id="th-tpl" aria-label="תבנית מוכנה"><option value="">＋ תבנית מוכנה…</option></select><button type="button" class="btn sm" id="th-code">🔑 שלח קוד</button></div>

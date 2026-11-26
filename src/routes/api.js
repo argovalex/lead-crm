@@ -484,7 +484,7 @@ const MAIL_ACTS = ['REPLY_IN', 'MANUAL_EMAIL_OUT'];
 const snip = (t) => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 140);
 const mailItems = (msgs, acts) => [
   ...msgs.map((m) => ({ dir: 'out', kind: m.enrollmentId ? 'campaign' : 'manual', subject: m.subject, body: m.body, at: m.sentAt || m.createdAt, status: m.status, opened: !!m.openedAt, clicked: !!m.clickedAt, leadId: m.leadId })),
-  ...acts.map((a) => ({ dir: a.type === 'REPLY_IN' ? 'in' : 'out', kind: a.type === 'REPLY_IN' ? 'reply' : 'logged', subject: (a.data || {}).subject || '', body: (a.data || {}).body || '', at: a.createdAt, status: 'SENT', leadId: a.leadId })),
+  ...acts.map((a) => ({ dir: a.type === 'REPLY_IN' ? 'in' : 'out', kind: a.type === 'REPLY_IN' ? 'reply' : String((a.data || {}).messageId || '').startsWith('gmdss-activity:') ? 'manual' : 'logged', subject: (a.data || {}).subject || '', body: (a.data || {}).body || '', at: a.createdAt, status: 'SENT', leadId: a.leadId })),
 ].sort((a, b) => new Date(a.at) - new Date(b.at));
 const MSG_SEL = { leadId: true, subject: true, body: true, enrollmentId: true, status: true, createdAt: true, sentAt: true, openedAt: true, clickedAt: true };
 const MSG_OK = { in: ['SENT', 'QUEUED', 'SENDING', 'DRAFT'] };
