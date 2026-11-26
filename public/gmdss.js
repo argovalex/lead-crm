@@ -142,7 +142,7 @@ function render() {
   const rows = filtered();
   $('#tbl thead').innerHTML = `<tr><th><input type="checkbox" id="chk-page" title="בחר את המוצגים"></th>${COLS.map(([k, h]) =>
     `<th data-k="${k}" title="${k === 'engagement' ? 'נמסר = המייל הגיע לתיבה. נפתח = הנמען פתח אותו. הקלקה = לחץ על קישור או סרטון' : ''}">${h}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>`;
-  $('#tbl tbody').innerHTML = rows.map((l) => `<tr class="p-${esc(l.priority || '')}">
+  $('#tbl tbody').innerHTML = rows.map((l) => `<tr class="p-${esc(l.priority || '')}${l.dormant ? ' dormant' : ''}"${l.dormant ? ' title="ליד רדום: אין פעילות מעל 14 יום"' : ''}>
     <td><input type="checkbox" class="rc" data-id="${l.id}" ${selected.has(l.id) ? 'checked' : ''} ${l.email ? '' : 'title="אין אימייל: אפשר למחוק או לערוך, אי אפשר לשלוח"'}></td>
     ${COLS.map(([k]) => `<td>${cell(l, k)}</td>`).join('')}</tr>`).join('')
     || `<tr><td colspan="${COLS.length + 1}" class="muted">אין תוצאות</td></tr>`;

@@ -196,7 +196,7 @@ async function syncSentToMainLead(prisma, leadId) {
     const lastIn = await prisma.activity.findFirst({ where: { leadId: main.id, type: { in: ['REPLY_IN', 'SMS_IN'] } }, orderBy: { createdAt: 'desc' } });
     const answered = !lastIn || last.createdAt > lastIn.createdAt;
     const due = lead.nextFollowUpAt && (lead.nextAction === 'להשיב' || lead.nextFollowUpAt < last.createdAt);
-    if (answered && due && lead.stage !== 'LOST') {
+    if (answered && due && lead.stage !== 'LOST' && !lead.stale) { // a dormant lead stays dormant: opening the screen must not revive it
       await prisma.lead.update({ where: { id: main.id }, data: { nextAction: 'מעקב', nextFollowUpAt: new Date(last.createdAt.getTime() + 5 * 86400000), lastActivityAt: lead.lastActivityAt > last.createdAt ? lead.lastActivityAt : last.createdAt, stale: false } });
       await require('./tasks').reconcileFromLead(main.id, prisma);
       n++;
@@ -224,7 +224,7 @@ async function syncSentToMainAll(prisma, { force = false } = {}) {
 // mail. This covers mail logged with its real date (import, GMDSS card, main mail screen) that did not move the
 // reminder. The reminder becomes the usual 5-day follow-up counted from that mail.
 async function settleOverdueBySentMail(prisma) {
-  const overdue = await prisma.lead.findMany({ where: { stage: { not: 'LOST' }, nextFollowUpAt: { lt: new Date() } }, select: { id: true, nextFollowUpAt: true, lastActivityAt: true } });
+  const overdue = await prisma.lead.findMany({ where: { stage: { not: 'LOST' }, stale: false, nextFollowUpAt: { lt: new Date() } }, select: { id: true, nextFollowUpAt: true, lastActivityAt: true } });
   let n = 0;
   for (const l of overdue) {
     const [out, inn] = await Promise.all([
