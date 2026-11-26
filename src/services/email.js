@@ -236,14 +236,20 @@ async function handleEvent(eventId, event, db = prisma, now = new Date()) {
 // Flag leads with no activity for STALE_DAYS (open pipeline only). Flag clears on next activity.
 async function flagStale(now = new Date(), db = prisma) {
   const cutoff = new Date(now.getTime() - config.staleDays * DAY);
-  const rows = await db.lead.findMany({
-    where: { stale: false, lastActivityAt: { lt: cutoff }, stage: { notIn: ['WON', 'LOST'] } },
-    select: { id: true },
-  });
-  if (!rows.length) return 0;
-  const ids = rows.map((r) => r.id);
-  await db.lead.updateMany({ where: { id: { in: ids } }, data: { stale: true } });
-  await db.activity.createMany({ data: ids.map((leadId) => ({ leadId, type: 'STALE_FLAGGED', data: { days: config.staleDays }, createdAt: now })) });
+  const open = { stage: { notIn: ['WON', 'LOST'] }, lastActivityAt: { lt: cutoff } };
+  const fresh = await db.lead.findMany({ where: { ...open, stale: false }, select: { id: true } });
+  const ids = fresh.map((r) => r.id);
+  if (ids.length) {
+    await db.lead.updateMany({ where: { id: { in: ids } }, data: { stale: true } });
+    await db.activity.createMany({ data: ids.map((leadId) => ({ leadId, type: 'STALE_FLAGGED', data: { days: config.staleDays }, createdAt: now })) });
+  }
+  // A dormant lead has no follow-up: close its open "next action" task (also catches leads flagged before this rule existed).
+  const withFu = await db.lead.findMany({ where: { ...open, stale: true, nextFollowUpAt: { not: null } }, select: { id: true } });
+  if (withFu.length) {
+    await db.lead.updateMany({ where: { id: { in: withFu.map((r) => r.id) } }, data: { nextFollowUpAt: null, nextAction: null } });
+    const tasks = require('./tasks');
+    for (const r of withFu) { try { await tasks.reconcileFromLead(r.id, db); } catch (e) { console.error('stale task close failed', r.id, e.message); } }
+  }
   return ids.length;
 }
 
