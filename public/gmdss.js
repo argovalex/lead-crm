@@ -45,10 +45,11 @@ const ENG = {
   reminded: (l) => (l.reminderCount || 0) > 0,
   manualRem: (l) => !!l.manualReminderAt,
   followup: isDue,
+  drafted: (l) => !!l.hasDraft && !l.closedAt,
   closed: (l) => !!l.closedAt,
   open: (l) => !l.closedAt,
 };
-const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['notsent', 'לא נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['closed', 'ארכיון']];
+const CHIPS = [['', 'כל הלידים'], ['sent', 'נשלחו'], ['notsent', 'לא נשלחו'], ['opened', 'נפתחו'], ['clicked', 'הקליקו'], ['replied', 'השיבו'], ['answered', 'נענו'], ['reminded', 'קיבלו תזכורת'], ['manualRem', 'תזכורת ידנית'], ['followup', 'מעקב להיום'], ['drafted', 'טיוטה'], ['closed', 'ארכיון']];
 const MORE_FILTERS = ['#f-country', '#f-segment', '#f-fit', '#f-prog', '#f-template'];
 const LTR = new Set();
 const TEXT = ['organization', 'contactName', 'country', 'segment', 'productFit', 'whyTheydBuy', 'website', 'email', 'phone', 'priority', 'emailStatus'];
