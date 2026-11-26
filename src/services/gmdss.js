@@ -171,11 +171,16 @@ ${String(m.body || '').slice(0, 5000)}`.trim(), m.sentAt);
 // The other direction: what Alex sent from the GMDSS card (first_sent / reply_sent) is mirrored onto the main-CRM
 // lead with the same address as a manual outgoing mail, so the "היום" window shows the same conversation.
 // Timeline plus the usual 5-day follow-up for a fresh send; older entries are added as backfill only.
+const normOrg = (v) => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
 async function syncSentToMainLead(prisma, leadId) {
-  const main = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, email: true } });
-  if (!main || !main.email) return 0;
-  const gl = (await prisma.gmdssLead.findMany({ where: { email: { not: null } }, select: { id: true, email: true } }))
-    .filter((l) => parseEmails(l.email).includes(main.email.toLowerCase()));
+  const main = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, email: true, company: true } });
+  if (!main) return 0;
+  // A GMDSS card belongs to the main lead by organization name (the card's address may have been corrected since
+  // the main lead was created), or by a shared email address.
+  const org = normOrg(main.company), addr = (main.email || '').toLowerCase();
+  if (!org && !addr) return 0;
+  const gl = (await prisma.gmdssLead.findMany({ select: { id: true, email: true, organization: true } }))
+    .filter((l) => (org && normOrg(l.organization) === org) || (addr && parseEmails(l.email || '').includes(addr)));
   if (!gl.length) return 0;
   const acts = await prisma.gmdssActivity.findMany({ where: { leadId: { in: gl.map((l) => l.id) }, type: { in: ['first_sent', 'reply_sent'] } }, orderBy: { createdAt: 'asc' } });
   const { logInteraction } = require('./leads');
@@ -210,13 +215,14 @@ let lastBulk = 0;
 async function syncSentToMainAll(prisma, { force = false } = {}) {
   if (!force && Date.now() - lastBulk < 60000) return 0;
   lastBulk = Date.now();
-  const sent = await prisma.gmdssActivity.findMany({ where: { type: { in: ['first_sent', 'reply_sent'] } }, select: { lead: { select: { email: true } } } });
+  const sent = await prisma.gmdssActivity.findMany({ where: { type: { in: ['first_sent', 'reply_sent'] } }, select: { lead: { select: { email: true, organization: true } } } });
   const addrs = [...new Set(sent.flatMap((a) => parseEmails(a.lead.email || '')))];
+  const orgs = new Set(sent.map((a) => normOrg(a.lead.organization)).filter(Boolean));
   let n = 0;
-  if (addrs.length) {
-    const mains = await prisma.lead.findMany({ where: { email: { in: addrs, mode: 'insensitive' } }, select: { id: true } });
-    for (const m of mains) n += await syncSentToMainLead(prisma, m.id).catch(() => 0);
-  }
+  const ids = new Set();
+  if (addrs.length) for (const m of await prisma.lead.findMany({ where: { email: { in: addrs, mode: 'insensitive' } }, select: { id: true } })) ids.add(m.id);
+  if (orgs.size) for (const m of await prisma.lead.findMany({ where: { company: { not: null } }, select: { id: true, company: true } })) if (orgs.has(normOrg(m.company))) ids.add(m.id);
+  for (const id of ids) n += await syncSentToMainLead(prisma, id).catch(() => 0);
   return n + await settleOverdueBySentMail(prisma).catch(() => 0);
 }
 
