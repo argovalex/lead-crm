@@ -489,11 +489,19 @@ let lastMailN = null;
 function flashMail(n) {
   const b = $('#mail-count');
   b.textContent = n; b.classList.toggle('hidden', !n); b.classList.toggle('flash', n > 0);
-  if (lastMailN !== null && n > lastMailN) toast('הגיע דואר חדש');
+  if (lastMailN !== null && n > lastMailN) { toast('הגיע דואר חדש'); notifyMail('הגיע דואר חדש', `${n} ממתינות להשיב`); }
   lastMailN = n;
 }
+// Desktop notification + short beep, so new mail is noticed even when this tab is in the background.
+function notifyMail(title, body) {
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body, tag: 'crm-mail' }); } catch { /* ignore */ }
+  try {
+    const c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator(), g = c.createGain();
+    o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = 0.08; o.start(); o.stop(c.currentTime + 0.25);
+  } catch { /* ignore */ }
+}
+document.addEventListener('click', () => { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch { /* ignore */ } }, { once: true });
 async function pollReplies() {
-  if (document.hidden) return;
   try { const rows = await api('/followups'); flashReplies(rows.filter((l) => l.replied && l.nextAction === 'להשיב').length); } catch { /* ignore */ }
   try { const rows = await api('/mailbox'); flashMail(rows.filter((r) => r.awaiting).length); } catch { /* ignore */ }
 }
@@ -674,7 +682,7 @@ let mailSel = null;
 let pendingCode = null;
 let mailFilter = 'all';
 const KIND_LABEL = { campaign: 'קמפיין', manual: 'אישי', reply: 'תשובה שהתקבלה', logged: 'נשלח מחוץ למערכת' };
-const MSTATUS = { QUEUED: 'בתור', SENDING: 'נשלח כעת', DRAFT: 'ממתין לאישור' };
+const MSTATUS = { SENDING: 'נשלח כעת', DRAFT: 'ממתין לאישור' };
 
 async function renderMail(forceThread = false) {
   const rows = await api(mailFilter === 'closed' ? '/mailbox?closed=1' : '/mailbox');
@@ -692,7 +700,7 @@ async function renderMail(forceThread = false) {
       <div class="m1"><b>${esc(r.lead.org || r.lead.contact || r.lead.name)}</b><time>${ago(r.last.at)}</time></div>
       <div class="m2 muted">${esc(r.lead.org && r.lead.contact ? r.lead.contact : r.lead.email)}</div>
       <div class="m3"><span class="dir ${r.last.dir}">${r.last.dir === 'in' ? '↩ התקבל' : '→ נשלח'}</span> <span dir="auto">${esc(r.last.subject || r.last.snippet)}</span></div>
-      <div class="m4">${progHtml(r.lead)}${r.awaiting ? '<span class="flag bad">להשיב</span>' : ''}${r.replies ? `<span class="flag good">${r.replies} תשובות</span>` : ''}${r.campaign ? '<span class="flag">קמפיין</span>' : ''}${r.pending ? `<span class="flag warn">${r.pending} בתור</span>` : ''}</div>
+      <div class="m4">${progHtml(r.lead)}${r.awaiting ? '<span class="flag bad">להשיב</span>' : ''}${r.replies ? `<span class="flag good">${r.replies} תשובות</span>` : ''}${r.campaign ? '<span class="flag">קמפיין</span>' : ''}</div>
     </div>`).join('') : '<p class="muted pad">אין שיחות. מייל שתשלח, וגם תשובה שתתקבל, יופיעו כאן.</p>';
   $('#mail-list').querySelectorAll('.mrow').forEach((el) => el.addEventListener('click', () => { mailSel = +el.dataset.id; renderMail(true); }));
   if (mailSel && (forceThread || !$('#mail-thread .thread'))) await renderThread(mailSel);
