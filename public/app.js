@@ -718,8 +718,8 @@ async function renderThread(leadId) {
       </div>`).join('') : '<p class="muted pad">עוד לא נשלח או התקבל מייל מהליד הזה.</p>'}</div>
     ${emailable ? `<form class="th-reply" id="th-form">
       <div class="logrow"><select id="th-tpl" aria-label="תבנית מוכנה"><option value="">＋ תבנית מוכנה…</option></select><button type="button" class="btn sm" id="th-code">🔑 שלח קוד</button></div>
-      <input name="subject" placeholder="נושא" value="${esc(subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '')}" required>
-      <textarea name="body" rows="7" dir="rtl" style="text-align:right;unicode-bidi:isolate" placeholder="${lastIn ? 'כתוב תשובה…' : 'כתוב מייל…'}" required></textarea>
+      <input name="subject" dir="ltr" style="text-align:left" placeholder="נושא" value="${esc(subj ? (/^re:/i.test(subj) ? subj : `Re: ${subj}`) : '')}" required>
+      <textarea name="body" rows="7" dir="ltr" style="text-align:left" placeholder="${lastIn ? 'כתוב תשובה…' : 'כתוב מייל…'}" required></textarea>
       <div class="logrow"><span class="muted" id="th-hint">החתימה נוספת אוטומטית. המייל יישלח בדקה הקרובה.</span>${lastIn ? '<button type="button" class="btn sm" id="th-suggest">✨ הצעת תשובה</button>' : ''}<button class="btn primary">${lastIn ? 'שלח תשובה' : 'שלח'}</button></div>
     </form>` : '<p class="muted pad">הליד הסיר את עצמו או שהכתובת חוזרת, לא ניתן לשלוח לו.</p>'}
   </div>`;
